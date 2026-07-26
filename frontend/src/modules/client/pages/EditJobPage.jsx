@@ -428,7 +428,9 @@ export default function EditJobPage() {
 
               {/* Budget */}
               <div>
-                <label style={labelStyle}>Budget Range (VND) <span style={{ color: "#f87171" }}>*</span></label>
+                <label style={labelStyle}>
+                  Budget Range (VND) <span style={{ color: "#f87171" }}>*</span>
+                </label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center" }}>
                   <div style={{ position: "relative" }}>
                     

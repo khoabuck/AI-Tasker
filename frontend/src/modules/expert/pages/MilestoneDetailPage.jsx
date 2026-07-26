@@ -7,6 +7,8 @@ import disputeService from "../../../services/dispute.service";
 import projectService from "../../../services/project.service";
 
 import { compareDateDesc, formatDateTime } from "../../../utils/dateTime.utils";
+
+// ===== Form defaults =====
 const emptySubmissionForm = {
   fileUrl: "",
   demoUrl: "",
@@ -24,10 +26,13 @@ const emptyDisputeForm = {
   images: [],
 };
 
+// ===== Expert milestone page: delivery, resubmission, and dispute handling =====
 export default function MilestoneDetailPage() {
+  // ===== Route params =====
   const { milestoneId } = useParams();
   const navigate = useNavigate();
 
+  // ===== Milestone, project, submission, and dispute data =====
   const [milestone, setMilestone] = useState(null);
   const [project, setProject] = useState(null);
   const [submissions, setSubmissions] = useState([]);
@@ -42,6 +47,7 @@ export default function MilestoneDetailPage() {
   const [disputeFieldErrors, setDisputeFieldErrors] = useState({});
   const [showDisputeConfirm, setShowDisputeConfirm] = useState(false);
 
+  // ===== Loading, validation, and feedback state =====
   const [loading, setLoading] = useState(true);
   const [submissionLoading, setSubmissionLoading] = useState(false);
   const [submissionFieldErrors, setSubmissionFieldErrors] = useState({});
@@ -126,6 +132,7 @@ export default function MilestoneDetailPage() {
     showDisputeModal,
   ]);
 
+  // ===== API loading: milestone detail, project status, disputes, submissions =====
   const loadMilestone = async ({
     silent = false,
     preserveForm = false,
@@ -531,6 +538,7 @@ export default function MilestoneDetailPage() {
     return Object.values(fieldErrors)[0] || "";
   };
 
+  // ===== Submit work flow: validate, review, then confirm submission =====
   const handleSubmitWork = (event) => {
     event.preventDefault();
 
@@ -756,6 +764,7 @@ export default function MilestoneDetailPage() {
     navigate("/expert/projects");
   };
 
+  // ===== Main render =====
   if (loading) {
     return (
       <ExpertLayout>
@@ -898,8 +907,8 @@ export default function MilestoneDetailPage() {
 
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-400">
                     {projectCompleted
-                      ? "Review the completed milestone, previous submissions, and any existing dispute."
-                      : "Review the brief, submit work, and manage client feedback."}
+                      ? "Review the completed milestone, previous submissions, client feedback, and any existing dispute."
+                      : "Review the brief, submit your delivery package, follow client feedback, and open a dispute when review decisions need admin support."}
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -930,7 +939,7 @@ export default function MilestoneDetailPage() {
                     <button
                       type="button"
                       onClick={openDisputeModal}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-3 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
                     >
                       <span className="material-symbols-outlined text-[18px]">
                         gavel
@@ -945,7 +954,7 @@ export default function MilestoneDetailPage() {
                       onClick={() =>
                         navigate(`/expert/disputes/${activeDisputeId}`)
                       }
-                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-3 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
                     >
                       <span className="material-symbols-outlined text-[18px]">
                         visibility
@@ -958,7 +967,7 @@ export default function MilestoneDetailPage() {
                     type="button"
                     onClick={loadMilestone}
                     disabled={submissionLoading}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-3 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <span className="material-symbols-outlined text-[18px]">
                       refresh
@@ -998,34 +1007,42 @@ export default function MilestoneDetailPage() {
 
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_330px] xl:items-start">
             <main className="min-w-0 space-y-5">
-              <Card
-                title="Milestone brief"
-                subtitle=""
-                icon="task_alt"
-              >
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
-                    {milestone.description || "No description provided."}
-                  </p>
-                </div>
-
-                {milestone.acceptanceCriteria && (
-                  <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-                    <div className="mb-2 flex items-center gap-2 text-cyan-300">
-                      <span className="material-symbols-outlined text-[18px]">
-                        checklist
-                      </span>
-                      <p className="text-xs font-black uppercase tracking-[0.18em]">
-                        Acceptance Criteria
+              {(milestone.description || milestone.acceptanceCriteria) && (
+                <Card
+                  title="Milestone brief"
+                  subtitle="Client requirements and approval criteria for this delivery."
+                  icon="task_alt"
+                >
+                  {milestone.description && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
+                        {milestone.description}
                       </p>
                     </div>
+                  )}
 
-                    <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
-                      {milestone.acceptanceCriteria}
-                    </p>
-                  </div>
-                )}
-              </Card>
+                  {milestone.acceptanceCriteria && (
+                    <div
+                      className={`rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 ${
+                        milestone.description ? "mt-4" : ""
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center gap-2 text-cyan-300">
+                        <span className="material-symbols-outlined text-[18px]">
+                          checklist
+                        </span>
+                        <p className="text-xs font-black uppercase tracking-[0.18em]">
+                          Acceptance Criteria
+                        </p>
+                      </div>
+
+                      <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
+                        {milestone.acceptanceCriteria}
+                      </p>
+                    </div>
+                  )}
+                </Card>
+              )}
 
               <Card
                 title={formTitle}
@@ -1153,7 +1170,9 @@ export default function MilestoneDetailPage() {
                             <p className="text-sm font-black text-white">Delivery package</p>
                           </div>
                           <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                            Add the main delivery link and any supporting review details.
+                            Add the main review link first, then include demo,
+                            test, and handover notes so the client can approve
+                            faster.
                           </p>
                         </div>
                         <div className="flex items-center border-t border-white/10 bg-black/10 px-5 py-4 md:border-l md:border-t-0">
@@ -1294,7 +1313,7 @@ export default function MilestoneDetailPage() {
                           type="button"
                           onClick={resetSubmissionForm}
                           disabled={submitting}
-                          className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                          className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Clear Form
                         </button>
@@ -1302,7 +1321,7 @@ export default function MilestoneDetailPage() {
                         <button
                           type="submit"
                           disabled={submitting}
-                          className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           <span className="material-symbols-outlined text-[20px]">
                             send
@@ -1317,7 +1336,8 @@ export default function MilestoneDetailPage() {
                       </div>
                     </div>
                   </form>
-                )}              </Card>
+                )}
+              </Card>
 
               <Card
                 title="Submission History"
@@ -1573,6 +1593,7 @@ function isResolvedDisputeStatus(status) {
   ].includes(String(status || "").trim().toUpperCase());
 }
 
+// ===== Dispute modal: opens an admin review case for this milestone =====
 function DisputeModal({
   formData,
   milestone,
@@ -1589,7 +1610,7 @@ function DisputeModal({
     <div className="fixed inset-0 z-[999] flex items-center justify-center overflow-hidden bg-black/70 px-4 py-5 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
-        className="max-h-[82vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#151a22] p-4 shadow-2xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="max-h-[86vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-2xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
@@ -1602,7 +1623,8 @@ function DisputeModal({
             </h2>
 
             <p className="mt-1.5 text-sm leading-5 text-gray-400">
-              Enter the required reason. Evidence can be added now or later.
+              Explain the disagreement clearly. Evidence can be added now or
+              later while the dispute is open.
             </p>
           </div>
 
@@ -1681,7 +1703,7 @@ function DisputeModal({
             </div>
 
             <label
-              className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed bg-red-400/[0.05] px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400/10 ${
+              className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed bg-red-400/[0.05] px-4 py-4 text-sm font-bold text-red-300 transition hover:bg-red-400/10 ${
                 fieldErrors?.images
                   ? "border-red-400/70"
                   : "border-red-400/30 hover:border-red-400/60"
@@ -1746,7 +1768,7 @@ function DisputeModal({
             type="button"
             onClick={onClose}
             disabled={creating}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -1754,7 +1776,7 @@ function DisputeModal({
           <button
             type="submit"
             disabled={creating}
-            className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             {creating ? "Opening..." : "Open Dispute"}
           </button>
@@ -1764,6 +1786,7 @@ function DisputeModal({
   );
 }
 
+// ===== Shared URL input used inside modals =====
 function ModalInput({ label, value, disabled, placeholder, error, onChange }) {
   return (
     <label className="block">
@@ -1777,7 +1800,7 @@ function ModalInput({ label, value, disabled, placeholder, error, onChange }) {
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-[#0f141d] px-3 py-2.5 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60 ${
+        className={`min-h-[52px] w-full rounded-xl border bg-[#0f141d] px-4 py-3.5 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] focus:ring-2 focus:ring-red-400/15 disabled:cursor-not-allowed disabled:opacity-60 ${
           error ? "border-red-400/70 focus:border-red-400" : "border-white/10 focus:border-red-400"
         }`}
       />
@@ -1791,6 +1814,7 @@ function ModalInput({ label, value, disabled, placeholder, error, onChange }) {
   );
 }
 
+// ===== Shared textarea used inside modals =====
 function ModalTextArea({
   label,
   value,
@@ -1813,7 +1837,7 @@ function ModalTextArea({
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border bg-[#0f141d] px-3 py-2.5 text-sm leading-5 text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60 ${
+        className={`min-h-[118px] w-full resize-none rounded-xl border bg-[#0f141d] px-4 py-3.5 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] focus:ring-2 focus:ring-red-400/15 disabled:cursor-not-allowed disabled:opacity-60 ${
           error ? "border-red-400/70 focus:border-red-400" : "border-white/10 focus:border-red-400"
         }`}
       />
@@ -1827,6 +1851,7 @@ function ModalTextArea({
   );
 }
 
+// ===== Confirmation dialog before submit/dispute actions =====
 function ConfirmDialog({
   title,
   message,
@@ -1849,7 +1874,7 @@ function ConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 hover:text-white disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -1857,7 +1882,7 @@ function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className={`rounded-xl px-4 py-2.5 text-sm font-black transition disabled:opacity-50 ${danger ? "bg-red-400 text-black hover:bg-red-300" : "bg-cyan-400 text-black hover:bg-cyan-300"}`}
+            className={`rounded-xl px-5 py-3 text-sm font-black transition disabled:opacity-50 ${danger ? "bg-red-400 text-black hover:bg-red-300" : "bg-cyan-400 text-black hover:bg-cyan-300"}`}
           >
             {loading ? "Processing..." : confirmLabel}
           </button>
@@ -1867,6 +1892,7 @@ function ConfirmDialog({
   );
 }
 
+// ===== Submission form section wrapper =====
 function SubmissionSection({
   number,
   title,
@@ -1875,7 +1901,7 @@ function SubmissionSection({
   children,
 }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#10151d] p-4 transition hover:border-white/15 md:p-5">
+    <section className="rounded-2xl border border-white/10 bg-[#10151d] p-4 transition hover:border-cyan-400/20 md:p-5">
       <div className="mb-4 flex items-start gap-3">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/10 text-xs font-black text-cyan-300">
           {number}
@@ -1903,6 +1929,7 @@ function SubmissionSection({
   );
 }
 
+// ===== Submit work URL input: larger target for editing links =====
 function SubmitWorkInput({
   label,
   required = false,
@@ -1926,7 +1953,7 @@ function SubmitWorkInput({
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-[#0f141d] px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60 ${
+        className={`min-h-[52px] w-full rounded-xl border bg-[#0f141d] px-4 py-3.5 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] focus:ring-2 focus:ring-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-60 ${
           error
             ? "border-red-400/70 focus:border-red-400"
             : "border-white/10 focus:border-cyan-400"
@@ -1951,6 +1978,7 @@ function SubmitWorkInput({
   );
 }
 
+// ===== Submit work textarea: larger target for delivery descriptions =====
 function SubmitWorkTextArea({
   label,
   required = false,
@@ -1979,7 +2007,7 @@ function SubmitWorkTextArea({
         onChange={(event) => onChange(event.target.value)}
         rows={rows}
         placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border bg-[#0f141d] px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60 ${
+        className={`min-h-[132px] w-full resize-none rounded-xl border bg-[#0f141d] px-4 py-3.5 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] focus:ring-2 focus:ring-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-60 ${
           error
             ? "border-red-400/70 focus:border-red-400"
             : "border-white/10 focus:border-cyan-400"
@@ -2071,7 +2099,16 @@ function SubmissionCard({ submission, submissionNumber, onDetail }) {
           </p>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            <LinkPill label="File" url={submission.fileUrl} />
+            {(submission.artifacts?.length
+              ? submission.artifacts
+              : [{ label: "File", url: submission.fileUrl }]
+            ).map((artifact, index) => (
+              <LinkPill
+                key={artifact.deliverableArtifactId || artifact.url || index}
+                label={artifact.label || formatArtifactType(artifact.artifactType)}
+                url={artifact.url}
+              />
+            ))}
             <LinkPill label="Demo" url={submission.demoUrl} />
             <LinkPill label="Test" url={submission.testResultUrl} />
           </div>
@@ -2089,6 +2126,7 @@ function SubmissionCard({ submission, submissionNumber, onDetail }) {
   );
 }
 
+// ===== Shared page card wrapper =====
 function Card({ title, subtitle, icon, children }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_16px_45px_rgba(0,0,0,0.22)]">
@@ -2286,6 +2324,15 @@ function LinkPill({ label, url }) {
       {label}
     </a>
   );
+}
+
+function formatArtifactType(value) {
+  return String(value || "File")
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function EmptyState({ icon, title, description }) {

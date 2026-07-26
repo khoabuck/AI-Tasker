@@ -23,7 +23,8 @@ import { formatDateTime } from "../utils/dateTime.utils";
 
 const AuthContext = createContext(null);
 
-const ACCOUNT_STATUS_CHECK_INTERVAL_MS = 15000;
+const ACCOUNT_STATUS_CHECK_INTERVAL_MS = 60000;
+const MAX_CONSECUTIVE_UNAUTHORIZED_FAILURES = 2;
 
 const PUBLIC_AUTH_PATHS = [
   "/",
@@ -368,6 +369,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const checkingAuthErrorRef = useRef(false);
+  const unauthorizedFailureCountRef = useRef(0);
   const userRef = useRef(null);
 
   const [blockedModal, setBlockedModal] = useState({
@@ -382,7 +384,27 @@ export function AuthProvider({ children }) {
     userRef.current = user;
   }, [user]);
 
+  const resetUnauthorizedFailures = () => {
+    unauthorizedFailureCountRef.current = 0;
+  };
+
+  const shouldConfirmUnauthorized = (error) => {
+    const status = error?.response?.status;
+
+    if (status !== 401) {
+      return true;
+    }
+
+    unauthorizedFailureCountRef.current += 1;
+
+    return (
+      unauthorizedFailureCountRef.current >=
+      MAX_CONSECUTIVE_UNAUTHORIZED_FAILURES
+    );
+  };
+
   const clearCurrentSession = () => {
+    resetUnauthorizedFailures();
     clearAuth();
 
     setUser(null);
@@ -443,6 +465,8 @@ export function AuthProvider({ children }) {
       const response = await getRestoreSessionPromise();
       const freshUser = extractUser(response);
 
+      resetUnauthorizedFailures();
+
       if (!isValidUser(freshUser)) {
         clearCurrentSession();
         return;
@@ -459,6 +483,15 @@ export function AuthProvider({ children }) {
       setUser(freshUser);
       userRef.current = freshUser;
     } catch (error) {
+      const status = error?.response?.status;
+
+      if (
+        status === 401 &&
+        !shouldConfirmUnauthorized(error)
+      ) {
+        return;
+      }
+
       processAuthError(error, {
         hadKnownUser,
         allowSessionPopup: hadKnownUser,
@@ -514,6 +547,8 @@ export function AuthProvider({ children }) {
       try {
         const response = await getRestoreSessionPromise();
         const freshUser = extractUser(response);
+
+        resetUnauthorizedFailures();
 
         if (!isValidUser(freshUser)) {
           clearAuth();
@@ -632,6 +667,8 @@ export function AuthProvider({ children }) {
         const response = await getRestoreSessionPromise();
         const freshUser = extractUser(response);
 
+        resetUnauthorizedFailures();
+
         if (!isValidUser(freshUser)) {
           clearCurrentSession();
           return;
@@ -648,6 +685,15 @@ export function AuthProvider({ children }) {
         setUser(freshUser);
         userRef.current = freshUser;
       } catch (error) {
+        const status = error?.response?.status;
+
+        if (
+          status === 401 &&
+          !shouldConfirmUnauthorized(error)
+        ) {
+          return;
+        }
+
         processAuthError(error, {
           hadKnownUser,
           allowSessionPopup: true,
@@ -663,6 +709,8 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   const handleLoginSuccess = (authData) => {
+    resetUnauthorizedFailures();
+
     const nextUser = extractUser(authData?.user || authData);
 
     if (!isValidUser(nextUser)) {
@@ -694,6 +742,8 @@ export function AuthProvider({ children }) {
     try {
       const response = await getRestoreSessionPromise();
       const freshUser = extractUser(response);
+
+      resetUnauthorizedFailures();
 
       if (!isValidUser(freshUser)) {
         clearCurrentSession();

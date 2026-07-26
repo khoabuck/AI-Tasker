@@ -7,6 +7,49 @@ const EMPTY_REPORT_FORM = {
   reason: "",
 };
 
+
+const normalizeReviewStatus = (review) =>
+  String(
+    review?.status ||
+      review?.reviewStatus ||
+      review?.visibilityStatus ||
+      review?.raw?.status ||
+      review?.raw?.reviewStatus ||
+      review?.raw?.visibilityStatus ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+
+const normalizeReportStatus = (review) =>
+  String(
+    review?.reportStatus ||
+      review?.reviewReportStatus ||
+      review?.raw?.reportStatus ||
+      review?.raw?.reviewReportStatus ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+
+const isReviewHidden = (review) =>
+  ["HIDDEN", "REMOVED", "DISABLED", "DELETED"].includes(
+    normalizeReviewStatus(review)
+  );
+
+const hasReviewReport = (review) =>
+  Boolean(review?.hasReported) ||
+  [
+    "OPEN",
+    "PENDING",
+    "UNDER_REVIEW",
+    "IN_REVIEW",
+    "ACCEPTED",
+    "APPROVED",
+    "RESOLVED",
+  ].includes(normalizeReportStatus(review)) ||
+  isReviewHidden(review);
+
 export default function ExpertReviewsPage() {
   const [reviews, setReviews] = useState([]);
   const [filter, setFilter] = useState("all");
@@ -46,7 +89,7 @@ export default function ExpertReviewsPage() {
 
     const fiveStar = reviews.filter((item) => Number(item.rating) === 5).length;
     const positive = reviews.filter((item) => Number(item.rating) >= 4).length;
-    const reported = reviews.filter((item) => item.hasReported).length;
+    const reported = reviews.filter(hasReviewReport).length;
 
     return {
       total,
@@ -71,7 +114,7 @@ export default function ExpertReviewsPage() {
     }
 
     if (filter === "reported") {
-      return reviews.filter((item) => item.hasReported);
+      return reviews.filter(hasReviewReport);
     }
 
     return reviews;
@@ -102,7 +145,14 @@ export default function ExpertReviewsPage() {
       return;
     }
 
-    if (review.hasReported) {
+    if (isReviewHidden(review)) {
+      setError(
+        "This review has already been hidden by the administrator."
+      );
+      return;
+    }
+
+    if (hasReviewReport(review)) {
       setError("This review has already been reported.");
       return;
     }
@@ -447,18 +497,26 @@ function FilterButton({ label, active, onClick }) {
 }
 
 function ReviewCard({ review, disabled, onReport }) {
-  const hasReported = Boolean(review.hasReported);
-  const reviewStatus = String(review.status || "").toUpperCase();
+  const reviewStatus = normalizeReviewStatus(review);
+  const reportStatus = normalizeReportStatus(review);
+  const reviewHidden = isReviewHidden(review);
+  const reportExists = hasReviewReport(review);
+  const canReport = !reviewHidden && !reportExists;
 
   return (
     <article className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex gap-4">
-          <Avatar name={review.reviewerName} url={review.reviewerAvatarUrl} />
+          <Avatar
+            name={review.reviewerName}
+            url={review.reviewerAvatarUrl}
+          />
 
-          <div>
+          <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h3 className="font-bold text-white">{review.reviewerName}</h3>
+              <h3 className="font-bold text-white">
+                {review.reviewerName}
+              </h3>
 
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
                 {formatDate(review.createdAt)}
@@ -468,8 +526,11 @@ function ReviewCard({ review, disabled, onReport }) {
                 <StatusBadge status={reviewStatus} />
               )}
 
-              {hasReported && (
-                <StatusBadge status={review.reportStatus || "OPEN"} labelPrefix="Report" />
+              {reportExists && (
+                <StatusBadge
+                  status={reportStatus || (reviewHidden ? "APPROVED" : "OPEN")}
+                  labelPrefix="Report"
+                />
               )}
             </div>
 
@@ -477,9 +538,30 @@ function ReviewCard({ review, disabled, onReport }) {
               {review.projectTitle}
             </p>
 
-            <p className="mt-3 text-sm leading-6 text-gray-300">
-              {review.comment || "No written feedback."}
-            </p>
+            {reviewHidden ? (
+              <div className="mt-3 rounded-xl border border-green-400/25 bg-green-400/10 px-4 py-3">
+                <div className="flex items-start gap-2">
+                  <span className="material-symbols-outlined mt-0.5 text-[18px] text-green-300">
+                    visibility_off
+                  </span>
+
+                  <div>
+                    <p className="text-sm font-bold text-green-200">
+                      Review hidden
+                    </p>
+
+                    <p className="mt-1 text-sm leading-6 text-green-100/70">
+                      Admin approved the report and this review is no longer
+                      visible publicly.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-3 break-words text-sm leading-6 text-gray-300">
+                {review.comment || "No written feedback."}
+              </p>
+            )}
           </div>
         </div>
 
@@ -488,14 +570,26 @@ function ReviewCard({ review, disabled, onReport }) {
             <StarRating rating={review.rating} />
           </div>
 
-          <button
-            type="button"
-            disabled={disabled || hasReported}
-            onClick={onReport}
-            className="rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {hasReported ? "Reported" : "Report"}
-          </button>
+          {canReport ? (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onReport}
+              className="rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Report
+            </button>
+          ) : (
+            <div
+              className={`rounded-xl border px-4 py-2 text-center text-sm font-bold ${
+                reviewHidden
+                  ? "border-green-400/30 bg-green-400/10 text-green-300"
+                  : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
+              }`}
+            >
+              {reviewHidden ? "Hidden by Admin" : "Reported"}
+            </div>
+          )}
         </div>
       </div>
     </article>

@@ -6,14 +6,19 @@ import contractService from "../../../services/contract.service";
 import { PROJECT_STATUS_LABEL } from "../../../constants/projectStatus";
 
 import { formatDateTime, parseUtcDate } from "../../../utils/dateTime.utils";
+
+// ===== Expert project page: milestone tracking and completion check =====
 export default function ProjectDetailPage() {
+  // ===== Route params =====
   const { projectId } = useParams();
   const navigate = useNavigate();
 
+  // ===== Project data state =====
   const [project, setProject] = useState(null);
   const [milestones, setMilestones] = useState([]);
   const [contractFinance, setContractFinance] = useState(null);
 
+  // ===== Loading and feedback state =====
   const [loading, setLoading] = useState(true);
   const [milestoneLoading, setMilestoneLoading] = useState(false);
   const [completionChecking, setCompletionChecking] = useState(false);
@@ -118,6 +123,7 @@ export default function ProjectDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId, completionChecking, showCompletionConfirm]);
 
+  // ===== Derived milestone and finance data used by the UI =====
   const displayedMilestones = useMemo(() => {
     if (Array.isArray(milestones) && milestones.length > 0) {
       return milestones;
@@ -136,6 +142,7 @@ export default function ProjectDetailPage() {
 
   const financialSource = contractFinance || project;
 
+  // ===== API loading: project, milestones, and contract finance =====
   const loadProject = async ({
     preserveMessage = false,
     silent = false,
@@ -220,11 +227,12 @@ export default function ProjectDetailPage() {
     }
   };
 
+  // ===== Completion check: server decides whether earnings can be released =====
   const handleCompleteCheck = async () => {
     const realProjectId = getProjectId(project) || projectId;
 
     if (!realProjectId) {
-      setError("Cannot run completion check because project id is missing.");
+      setError("Cannot run completion check because project information is unavailable.");
       return;
     }
 
@@ -257,13 +265,14 @@ export default function ProjectDetailPage() {
     const milestoneId = getMilestoneId(milestone);
 
     if (!milestoneId) {
-      setError("Cannot open milestone because milestone id is missing.");
+      setError("Cannot open this milestone because its information is unavailable.");
       return;
     }
 
     navigate(`/expert/milestones/${milestoneId}`);
   };
 
+  // ===== Main render =====
   if (loading) {
     return (
       <ExpertLayout>
@@ -297,6 +306,7 @@ export default function ProjectDetailPage() {
   }
 
   const status = String(project.status || "ACTIVE").toUpperCase();
+  const projectReference = formatReference(getProjectId(project) || projectId, "PRJ");
   const canRunCompletionCheck =
     displayedMilestones.length > 0 &&
     completionSummary.completed === displayedMilestones.length &&
@@ -329,11 +339,14 @@ export default function ProjectDetailPage() {
                 </h1>
 
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                  Manage milestones, submissions, and project details.
+                  Track milestone delivery, client review, project status, and
+                  when pending earnings can move to your wallet.
                 </p>
 
                 <div className="mt-5 flex flex-wrap gap-3">
                   <StatusBadge status={status} />
+
+                  <InfoPill icon="tag" label={projectReference} />
 
                   <InfoPill
                     icon="person"
@@ -379,7 +392,7 @@ export default function ProjectDetailPage() {
                     disabled={completionChecking}
                     className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {completionChecking ? "Checking..." : "Verify Completion"}
+                    {completionChecking ? "Checking..." : "Check Completion"}
                   </button>
                 )}
 
@@ -404,10 +417,13 @@ export default function ProjectDetailPage() {
             <Alert type="danger" title="Project error" message={error} />
           )}
 
+          <PostDisputeDecisionNotice project={project} navigate={navigate} />
+
           {showWalletAction && (
             <div className="mb-5 flex flex-col gap-3 rounded-xl border border-green-400/30 bg-green-400/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm leading-6 text-green-100">
-                Your latest earnings update is available in Wallet.
+                Your project earnings changed. Open Wallet to review available
+                and pending balances.
               </p>
 
               <button
@@ -454,7 +470,8 @@ export default function ProjectDetailPage() {
                     </h2>
 
                     <p className="mt-2 text-sm text-gray-400">
-                      Milestones will appear when the project is ready.
+                      Milestones will appear after the contract is confirmed and
+                      funded.
                     </p>
                   </div>
                 )}
@@ -475,9 +492,10 @@ export default function ProjectDetailPage() {
 
             <aside className="space-y-6">
               <Card title="Project summary" icon="monitoring">
+                <Info label="Reference" value={projectReference} />
                 <Info label="Status" value={getProjectStatusLabel(status)} />
                 <Info
-                  label="Contract Amount"
+                  label="Project value"
                   value={formatMoney(
                     getProjectGrossAmount(
                       financialSource,
@@ -495,7 +513,7 @@ export default function ProjectDetailPage() {
                   )}
                 />
                 <Info
-                  label="Your earnings"
+                  label="Net earnings"
                   value={formatMoney(
                     getProjectNetEarning(
                       financialSource,
@@ -503,13 +521,24 @@ export default function ProjectDetailPage() {
                     )
                   )}
                 />
+                <Info
+                  label="Funding secured"
+                  value={formatDate(project.escrowLockedAt)}
+                />
+                <Info
+                  label="Funds still locked"
+                  value={formatMoney(
+                    project.remainingMilestoneAmount ||
+                      getRemainingMilestoneAmount(displayedMilestones)
+                  )}
+                />
                 <Info label="Milestones" value={displayedMilestones.length} />
                 <Info
-                  label="Start Date"
+                  label="Started"
                   value={formatDate(getProjectStartDate(project, displayedMilestones))}
                 />
                 <Info
-                  label={isProjectCompleted(status) ? "Completed Date" : "Project Deadline"}
+                  label={isProjectCompleted(status) ? "Completed" : "Deadline"}
                   value={formatDate(
                     isProjectCompleted(status)
                       ? getProjectCompletedDate(project)
@@ -523,9 +552,9 @@ export default function ProjectDetailPage() {
       </div>
       {showCompletionConfirm && (
         <ConfirmActionModal
-          title="Run project completion check?"
+          title="Check project completion?"
           message="This will ask the server to verify every milestone. If all requirements are complete, pending earnings may be released to your available balance."
-          confirmLabel="Run Check"
+          confirmLabel="Check Completion"
           tone="green"
           loading={completionChecking}
           onCancel={() => !completionChecking && setShowCompletionConfirm(false)}
@@ -597,8 +626,47 @@ function SuccessToast({ message, onClose }) {
   );
 }
 
+function PostDisputeDecisionNotice({ project, navigate }) {
+  if (!project?.requiresPostDisputeDecision) return null;
+
+  return (
+    <section className="mb-6 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex gap-3">
+          <span className="material-symbols-outlined mt-0.5 text-yellow-300">
+            pending_actions
+          </span>
+          <div>
+            <p className="text-sm font-black text-white">
+              Waiting for client post-dispute decision
+            </p>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-yellow-100/80">
+              The disputed milestone was released to you. The project is waiting
+              for the client to choose whether to continue the project or end the
+              contract.
+            </p>
+          </div>
+        </div>
+
+        {project.latestResolvedDisputeId && (
+          <button
+            type="button"
+            onClick={() =>
+              navigate(`/expert/disputes/${project.latestResolvedDisputeId}`)
+            }
+            className="shrink-0 rounded-xl border border-yellow-400/40 bg-yellow-400/10 px-4 py-2.5 text-sm font-bold text-yellow-200 transition hover:bg-yellow-400 hover:text-black"
+          >
+            View dispute
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
 
 
+
+// ===== Confirmation modal for project completion checks =====
 function ConfirmActionModal({
   title,
   message,
@@ -632,7 +700,7 @@ function ConfirmActionModal({
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -641,7 +709,7 @@ function ConfirmActionModal({
             type="button"
             disabled={loading}
             onClick={onConfirm}
-            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
+            className={`rounded-xl border px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
           >
             {loading ? "Processing..." : confirmLabel}
           </button>
@@ -652,8 +720,10 @@ function ConfirmActionModal({
 }
 
 
+// ===== Milestone card shown in the project timeline list =====
 function MilestoneCard({ milestone, onOpen }) {
   const status = String(milestone.status || "PENDING").toUpperCase();
+  const paymentStatus = String(milestone.paymentStatus || "").toUpperCase();
   const readOnly = isMilestoneReadOnly(milestone);
 
   return (
@@ -672,21 +742,29 @@ function MilestoneCard({ milestone, onOpen }) {
             <span className="rounded-full border border-green-400/30 bg-green-400/10 px-3 py-1 text-xs font-bold text-green-300">
               {formatMoney(milestone.amount)}
             </span>
+
+            {paymentStatus && (
+              <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-xs font-bold text-purple-300">
+                Funds {getPaymentStatusLabel(paymentStatus)}
+              </span>
+            )}
           </div>
 
           <h3 className="font-bold text-white">
             {milestone.title || "Untitled Milestone"}
           </h3>
 
-          <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-400">
-            {milestone.description || "No milestone description."}
-          </p>
+          {milestone.description && (
+            <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-400">
+              {milestone.description}
+            </p>
+          )}
         </div>
 
         <button
           type="button"
           onClick={onOpen}
-          className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+          className={`shrink-0 rounded-xl border px-5 py-3 text-sm font-semibold transition ${
             readOnly
               ? "border-white/10 bg-white/[0.04] text-gray-300 hover:text-white"
               : "border-cyan-400/40 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black"
@@ -877,6 +955,7 @@ function MilestoneProgressTimeline({ milestones, onSelect }) {
   );
 }
 
+// ===== Shared page card wrapper =====
 function Card({ title, icon, children }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
@@ -1241,6 +1320,23 @@ function getProjectStatusLabel(status) {
   return PROJECT_STATUS_LABEL?.[status] || formatStatusLabel(status || "ACTIVE");
 }
 
+function getPaymentStatusLabel(status) {
+  const value = String(status || "").trim().toUpperCase();
+
+  const map = {
+    LOCKED: "Locked",
+    FROZEN: "Frozen",
+    PENDING: "Pending",
+    RELEASED: "Released",
+    PAID: "Released",
+    REFUNDED: "Refunded",
+    CANCELLED: "Cancelled",
+    CANCELED: "Cancelled",
+  };
+
+  return map[value] || formatStatusLabel(value);
+}
+
 function getProjectGrossAmount(entity, milestones = []) {
   const direct = firstPositiveNumber(
     entity?.finalPrice,
@@ -1364,6 +1460,29 @@ function getMilestoneAmount(milestone) {
     milestone?.Amount,
     milestone?.raw?.amount,
     milestone?.raw?.Amount,
+    0
+  );
+}
+
+function getRemainingMilestoneAmount(milestones = []) {
+  return (Array.isArray(milestones) ? milestones : []).reduce(
+    (total, milestone) => {
+      const paymentStatus = String(
+        milestone?.paymentStatus ||
+          milestone?.PaymentStatus ||
+          milestone?.escrowStatus ||
+          milestone?.EscrowStatus ||
+          milestone?.raw?.paymentStatus ||
+          milestone?.raw?.PaymentStatus ||
+          ""
+      ).toUpperCase();
+
+      if (["LOCKED", "FROZEN", "PENDING"].includes(paymentStatus)) {
+        return total + getMilestoneAmount(milestone);
+      }
+
+      return total;
+    },
     0
   );
 }
@@ -1589,6 +1708,16 @@ function formatStatusLabel(status) {
     .replace(/_/g, " ")
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatReference(value, prefix = "REF") {
+  const raw = String(value || "").trim();
+  if (!raw) return "N/A";
+
+  const clean = raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const compact = clean.length > 6 ? clean.slice(-6) : clean;
+
+  return `${prefix}-${compact || raw.toUpperCase()}`;
 }
 
 function getFriendlyError(err, fallback) {

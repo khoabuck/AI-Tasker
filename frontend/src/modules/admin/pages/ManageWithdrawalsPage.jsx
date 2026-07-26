@@ -3,15 +3,16 @@ import AdminLayout from "../../../components/layout/AdminLayout";
 import adminWithdrawalService from "../../../services/adminWithdrawal.service";
 
 import { formatDateTime } from "../../../utils/dateTime.utils";
+
+// ===== Filter options and form defaults =====
 const STATUS_OPTIONS = [
   "ALL",
   "PENDING",
   "PROCESSING",
-  "APPROVED",
-  "COMPLETED",
   "PAID",
   "REJECTED",
   "FAILED",
+  "EXPIRED",
 ];
 
 const EMPTY_ACTION = {
@@ -23,13 +24,17 @@ const EMPTY_FORM = {
   reason: "",
 };
 
+// ===== Admin withdrawals page: review, approve, reject, and sync payouts =====
 export default function ManageWithdrawalsPage() {
+  // ===== Withdrawal data state =====
   const [withdrawals, setWithdrawals] = useState([]);
   const [payosBalance, setPayosBalance] = useState(null);
 
+  // ===== Filter state =====
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
+  // ===== Loading and feedback state =====
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -59,6 +64,7 @@ export default function ManageWithdrawalsPage() {
     loadWithdrawals();
   }, []);
 
+  // ===== Derived list and dashboard stats =====
   const filteredWithdrawals = useMemo(() => {
     const search = keyword.trim().toLowerCase();
 
@@ -99,13 +105,21 @@ export default function ManageWithdrawalsPage() {
           result.processingAmount += amount;
         }
 
-        if (["APPROVED", "COMPLETED", "PAID", "SUCCESS"].includes(status)) {
-          result.approved += 1;
-          result.approvedAmount += amount;
+        if (status === "PAID") {
+          result.paid += 1;
+          result.paidAmount += amount;
         }
 
-        if (["REJECTED", "FAILED", "CANCELLED", "CANCELED"].includes(status)) {
+        if (status === "REJECTED") {
           result.rejected += 1;
+        }
+
+        if (status === "FAILED") {
+          result.failed += 1;
+        }
+
+        if (status === "EXPIRED") {
+          result.expired += 1;
         }
 
         return result;
@@ -114,16 +128,19 @@ export default function ManageWithdrawalsPage() {
         total: 0,
         pending: 0,
         processing: 0,
-        approved: 0,
+        paid: 0,
         rejected: 0,
+        failed: 0,
+        expired: 0,
         totalAmount: 0,
         pendingAmount: 0,
         processingAmount: 0,
-        approvedAmount: 0,
+        paidAmount: 0,
       }
     );
   }, [withdrawals]);
 
+  // ===== API loading: withdrawal requests =====
   const loadWithdrawals = async ({ keepMessage = false } = {}) => {
     try {
       setLoading(true);
@@ -144,6 +161,7 @@ export default function ManageWithdrawalsPage() {
     }
   };
 
+  // ===== PayOS balance check before approving payouts =====
   const handleCheckPayosBalance = async () => {
     try {
       setBalanceLoading(true);
@@ -167,6 +185,7 @@ export default function ManageWithdrawalsPage() {
     }
   };
 
+  // ===== Admin action modals =====
   const openApproveModal = (withdrawal) => {
     const balance = Number(
       payosBalance?.availableBalance ?? payosBalance?.currentBalance ?? 0
@@ -435,20 +454,20 @@ const requestApprovePayos = () => {
           value: maskAccountNumber(action.withdrawal.bankAccountNumber),
         },
         {
-          label: "PayOS Balance",
+          label: "PayOS balance",
           value: formatMoney(
             balanceValue,
             payosBalance?.currency || action.withdrawal.currency || "VND"
           ),
         },
         {
-          label: "Balance After",
+          label: "Balance after payout",
           value: formatMoney(
             balanceValue - amount,
             payosBalance?.currency || action.withdrawal.currency || "VND"
           ),
         },
-        { label: "Admin Reason", value: form.reason.trim() },
+        { label: "Admin note", value: form.reason.trim() },
       ],
     });
   };
@@ -515,6 +534,7 @@ const requestApprovePayos = () => {
     }
   };
 
+  // ===== Main render =====
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl">
@@ -529,7 +549,8 @@ const requestApprovePayos = () => {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Review payout requests, verify balance, and manage transfer status.
+              Review expert payout requests, check PayOS balance, approve valid
+              transfers, reject invalid requests, and sync payout status.
             </p>
           </div>
 
@@ -540,7 +561,7 @@ const requestApprovePayos = () => {
               disabled={loading || actionLoading || balanceLoading}
               className="w-fit rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {balanceLoading ? "Checking..." : "Check Balance"}
+              {balanceLoading ? "Checking..." : "Check PayOS balance"}
             </button>
 
             <button
@@ -581,15 +602,15 @@ const requestApprovePayos = () => {
             }
             description={
               balanceChecked
-                ? "Available for expert payouts"
-                : "Check before approving a payout"
+                ? "Available for approved expert payouts"
+                : "Check PayOS balance before approving a payout"
             }
             tone={balanceChecked ? "green" : "yellow"}
           />
 
           <StatCard
             icon="account_balance_wallet"
-            label="Requests"
+            label="Total requests"
             value={stats.total}
             description={formatMoney(stats.totalAmount, "VND")}
             tone="cyan"
@@ -597,7 +618,7 @@ const requestApprovePayos = () => {
 
           <StatCard
             icon="pending_actions"
-            label="Pending"
+            label="Pending approval"
             value={stats.pending}
             description={formatMoney(stats.pendingAmount, "VND")}
             tone="yellow"
@@ -612,10 +633,10 @@ const requestApprovePayos = () => {
           />
 
           <StatCard
-            icon="check_circle"
-            label="Approved"
-            value={stats.approved}
-            description={formatMoney(stats.approvedAmount, "VND")}
+            icon="paid"
+            label="Paid out"
+            value={stats.paid}
+            description={formatMoney(stats.paidAmount, "VND")}
             tone="green"
           />
         </section>
@@ -627,7 +648,7 @@ const requestApprovePayos = () => {
                 Search
               </label>
 
-              <div className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4">
+              <div className="flex h-14 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 transition focus-within:border-cyan-400/50 focus-within:ring-2 focus-within:ring-cyan-400/15">
                 <span className="material-symbols-outlined text-[20px] text-gray-500">
                   search
                 </span>
@@ -654,7 +675,7 @@ const requestApprovePayos = () => {
           <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg font-bold text-white">
-                Requests
+                Withdrawal request list
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
@@ -775,6 +796,7 @@ const requestApprovePayos = () => {
   );
 }
 
+// ===== Final review modal before approving or rejecting a payout =====
 function ReviewConfirmationModal({
   title,
   description,
@@ -863,7 +885,7 @@ function ReviewConfirmationModal({
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Back
           </button>
@@ -872,7 +894,7 @@ function ReviewConfirmationModal({
             type="button"
             disabled={loading}
             onClick={onConfirm}
-            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
+            className={`rounded-xl border px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
           >
             {loading ? "Processing..." : confirmLabel}
           </button>
@@ -966,6 +988,7 @@ function PageSkeleton({ rows = 4 }) {
 }
 
 
+// ===== Sync modal: checks latest PayOS transfer status without creating payout =====
 function SyncWithdrawalConfirmModal({
   withdrawal,
   loading,
@@ -1006,7 +1029,7 @@ function SyncWithdrawalConfirmModal({
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -1015,7 +1038,7 @@ function SyncWithdrawalConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:opacity-50"
+            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:opacity-50"
           >
             {loading ? "Checking..." : "Check Status"}
           </button>
@@ -1025,6 +1048,7 @@ function SyncWithdrawalConfirmModal({
   );
 }
 
+// ===== Withdrawal row: summary plus approve/sync/reject actions =====
 function WithdrawalRow({
   withdrawal,
   disabled,
@@ -1034,8 +1058,8 @@ function WithdrawalRow({
 }) {
   const status = String(withdrawal.status || "PENDING").toUpperCase();
   const canApprove = status === "PENDING";
-  const canReject = ["PENDING", "PROCESSING"].includes(status);
-  const canSync = ["PENDING", "PROCESSING", "APPROVED"].includes(status);
+  const canReject = status === "PENDING";
+  const canSync = status === "PROCESSING";
 
   return (
     <article className="p-5 transition hover:bg-white/[0.02]">
@@ -1088,7 +1112,12 @@ function WithdrawalRow({
             type="button"
             onClick={onApprove}
             disabled={disabled || !canApprove}
-            className="rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            title={
+              canApprove
+                ? "Approve this pending withdrawal"
+                : "Only pending withdrawals can be approved"
+            }
+            className="rounded-xl border border-green-400/40 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             Approve
           </button>
@@ -1097,7 +1126,12 @@ function WithdrawalRow({
             type="button"
             onClick={onSyncPayos}
             disabled={disabled || !canSync}
-            className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            title={
+              canSync
+                ? "Check the latest PayOS transfer status"
+                : "Only processing withdrawals can be synchronized"
+            }
+            className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             Check Status
           </button>
@@ -1106,7 +1140,12 @@ function WithdrawalRow({
             type="button"
             onClick={onReject}
             disabled={disabled || !canReject}
-            className="rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            title={
+              canReject
+                ? "Reject this pending withdrawal"
+                : "Only pending withdrawals can be rejected"
+            }
+            className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             Reject
           </button>
@@ -1160,6 +1199,7 @@ function WithdrawalSummary({ withdrawal }) {
   );
 }
 
+// ===== Dashboard statistic card =====
 function StatCard({ icon, label, value, description, tone = "cyan" }) {
   const toneClass = {
     cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
@@ -1188,6 +1228,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   );
 }
 
+// ===== Filter select with larger tap target =====
 function FilterSelect({ label, value, options, onChange }) {
   return (
     <div>
@@ -1198,7 +1239,7 @@ function FilterSelect({ label, value, options, onChange }) {
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-xl border border-white/10 bg-[#0d1117] px-4 text-sm font-bold text-white outline-none focus:border-cyan-400/50"
+        className="h-14 w-full rounded-xl border border-white/10 bg-[#0d1117] px-4 text-sm font-bold text-white outline-none focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/15"
       >
         {options.map((item) => (
           <option key={item} value={item}>
@@ -1210,6 +1251,7 @@ function FilterSelect({ label, value, options, onChange }) {
   );
 }
 
+// ===== Admin action modal: approve/reject form wrapper =====
 function ActionModal({
   title,
   subtitle,
@@ -1230,7 +1272,7 @@ function ActionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8">
-      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-6 py-5">
           <h2 className="text-xl font-bold text-white">{title}</h2>
           <p className="mt-1 text-sm text-gray-400">{subtitle}</p>
@@ -1270,6 +1312,7 @@ function ActionModal({
   );
 }
 
+// ===== Shared admin textarea for notes and rejection reasons =====
 function TextArea({
   label,
   value,
@@ -1288,9 +1331,9 @@ function TextArea({
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        rows={4}
+        rows={5}
         placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+        className={`min-h-[132px] w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-4 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:ring-2 focus:ring-cyan-400/15 ${
           error
             ? "border-red-400/70 focus:border-red-400"
             : "border-white/10 focus:border-cyan-400/50"
@@ -1320,13 +1363,17 @@ function StatusBadge({ status }) {
   const value = String(status || "PENDING").toUpperCase();
 
   const className =
-    ["APPROVED", "COMPLETED", "PAID", "SUCCESS"].includes(value)
+    value === "PAID"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : ["REJECTED", "FAILED", "CANCELLED", "CANCELED"].includes(value)
+      : value === "REJECTED"
         ? "border-red-400/30 bg-red-400/10 text-red-300"
-        : value === "PROCESSING"
-          ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
-          : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
+        : value === "FAILED"
+          ? "border-red-400/30 bg-red-400/10 text-red-300"
+          : value === "EXPIRED"
+            ? "border-gray-400/30 bg-gray-400/10 text-gray-300"
+            : value === "PROCESSING"
+              ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
+              : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
 
   return (
     <span

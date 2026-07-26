@@ -521,7 +521,16 @@ if (showFullLoading) {
               </div>
               <div style={{ display: "flex", gap: 28 }}>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#00F0FF" }}>{formatCurrency(job.budgetMin)} – {formatCurrency(job.budgetMax)}</div>
+                  <div
+                    style={{
+                      fontFamily: "JetBrains Mono, monospace",
+                      fontSize: 18,
+                      fontWeight: 700,
+                      color: "#00F0FF",
+                    }}
+                  >
+                    {formatCurrency(job.budgetMin)} – {formatCurrency(job.budgetMax)}
+                  </div>
                   
                 </div>
                 <div style={{ textAlign: "center" }}>

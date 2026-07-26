@@ -298,7 +298,23 @@ export default function ExpertNavbar() {
           </NavLink>
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => navigate("/expert/messages")}
+            className={`relative flex h-10 w-10 items-center justify-center rounded-full border transition ${
+              location.pathname.startsWith("/expert/messages")
+                ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-300"
+                : "border-white/10 bg-white/[0.04] text-gray-400 hover:border-cyan-400/40 hover:bg-cyan-400/10 hover:text-cyan-300"
+            }`}
+            title="Messages"
+            aria-label="Open messages"
+          >
+            <span className="material-symbols-outlined text-[20px]">
+              chat_bubble
+            </span>
+          </button>
+
           <div ref={notificationRef} className="relative">
             <button
               type="button"
@@ -644,30 +660,33 @@ function NotificationItem({
                 </span>
               </div>
 
-              <span className="flex shrink-0 items-center gap-0.5 text-[10px] font-black text-cyan-300">
-                {opening ? "Opening..." : target?.label || "Open"}
-                <span className="material-symbols-outlined text-[14px]">
-                  chevron_right
+              <div className="flex shrink-0 items-center gap-1.5">
+                {!isRead && (
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onMarkAsRead(notificationId);
+                    }}
+                    disabled={isMarking || opening}
+                    className="rounded-md px-2 py-1 text-[10px] font-bold text-gray-500 transition hover:bg-white/[0.05] hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {isMarking ? "Updating..." : "Mark read"}
+                  </button>
+                )}
+
+                <span className="flex items-center gap-0.5 text-[10px] font-black text-cyan-300">
+                  {opening ? "Opening..." : target?.label || "Open"}
+                  <span className="material-symbols-outlined text-[14px]">
+                    chevron_right
+                  </span>
                 </span>
-              </span>
+              </div>
             </div>
           </div>
         </div>
       </button>
 
-      {!isRead && (
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onMarkAsRead(notificationId);
-          }}
-          disabled={isMarking}
-          className="absolute bottom-2.5 right-9 rounded-md px-2 py-1 text-[10px] font-bold text-gray-500 opacity-0 transition hover:bg-white/[0.05] hover:text-cyan-300 group-hover:opacity-100 disabled:opacity-40"
-        >
-          {isMarking ? "Updating..." : "Mark read"}
-        </button>
-      )}
     </div>
   );
 }
@@ -793,6 +812,9 @@ function getNotificationTone(type, kind) {
       className: value.includes("REVISION")
         ? "border-yellow-400/20 bg-yellow-400/10 text-yellow-300"
         : "border-green-400/20 bg-green-400/10 text-green-300",
+      textClass: value.includes("REVISION")
+        ? "text-yellow-300"
+        : "text-green-300",
     };
   }
 

@@ -295,19 +295,24 @@ export default function MessagesPage() {
 
   return (
     <ExpertLayout>
+      <style>{`
+        .messages-hidden-scrollbar {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .messages-hidden-scrollbar::-webkit-scrollbar {
+          display: none;
+          width: 0;
+          height: 0;
+        }
+      `}</style>
+
       <div className="px-4 py-6 md:px-6">
         <div className="mx-auto max-w-7xl">
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
               Messages
-            </p>
-
-            <h1 className="text-3xl font-bold text-white md:text-3xl">
-              Messages
-            </h1>
-
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Chat with clients about active work and proposals.
             </p>
           </div>
 
@@ -317,9 +322,16 @@ export default function MessagesPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
-            <section className={`${cardStyle} overflow-hidden`}>
-              <div className="border-b border-white/10 p-5">
+          <div
+            className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]"
+            style={{
+              height: "clamp(560px, calc(100vh - 210px), 720px)",
+            }}
+          >
+            <section
+              className={`${cardStyle} flex min-h-0 flex-col overflow-hidden`}
+            >
+              <div className="shrink-0 border-b border-white/10 p-5">
                 <h2 className="text-lg font-bold text-white">
                   Conversations
                 </h2>
@@ -343,7 +355,7 @@ export default function MessagesPage() {
                 </div>
               </div>
 
-              <div className="max-h-[620px] overflow-y-auto">
+              <div className="messages-hidden-scrollbar min-h-0 flex-1 overflow-y-auto">
                 {loadingConversations && (
                   <div className="p-4">
                     <ConversationListSkeleton />
@@ -418,7 +430,9 @@ export default function MessagesPage() {
               </div>
             </section>
 
-            <section className={`${cardStyle} flex min-h-[620px] flex-col`}>
+            <section
+              className={`${cardStyle} flex min-h-0 flex-col overflow-hidden`}
+            >
               {!selectedConversation && (
                 <div className="flex flex-1 items-center justify-center p-8 text-center">
                   <div>
@@ -439,7 +453,7 @@ export default function MessagesPage() {
 
               {selectedConversation && (
                 <>
-                  <div className="flex items-center gap-4 border-b border-white/10 p-5">
+                  <div className="shrink-0 flex items-center gap-4 border-b border-white/10 p-5">
                     <div className="flex h-11 w-11 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/10 text-sm font-bold text-cyan-300">
                       {getInitials(getConversationName(selectedConversation))}
                     </div>
@@ -456,7 +470,7 @@ export default function MessagesPage() {
                     </div>
                   </div>
 
-                  <div className="flex-1 space-y-4 overflow-y-auto p-5">
+                  <div className="messages-hidden-scrollbar min-h-0 flex-1 space-y-4 overflow-y-auto p-5">
                     {loadingMessages && <MessageThreadSkeleton />}
 
                     {!loadingMessages && messages.length === 0 && (
@@ -520,7 +534,7 @@ export default function MessagesPage() {
 
                   <form
                     onSubmit={handleSendMessage}
-                    className="border-t border-white/10 p-5"
+                    className="shrink-0 border-t border-white/10 p-5"
                   >
                     <div className="flex gap-3">
                       <input

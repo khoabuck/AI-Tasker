@@ -92,7 +92,9 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
 
     const checkStatus = async () => {
       try {
-        const res = await walletService.getDepositOrderById(order.depositOrderId);
+        const res = await walletService.getDepositOrderById(
+          order.depositOrderId
+        );
         const latest = res;
 
         if (latest?.status === "PAID") {
@@ -119,7 +121,7 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
     }, 3000);
 
     return () => { stopped = true; clearInterval(pollInterval); };
-  }, [step, order]);
+  }, [step, order, onClose, onSuccess]);
 
   // Countdown tới expiresAt — chỉ để HIỂN THỊ, không tự quyết định hết hạn.
   // Việc hết hạn thật được xác nhận qua polling status ở trên (BE trả EXPIRED/CANCELLED).
@@ -361,6 +363,7 @@ function WithdrawModal({ onClose, onSuccess }) {
     setLoading(true); setError("");
     try {
       const res = await walletService.createWithdrawal(form);
+
       // Response thật: { success, message, data: { withdrawalRequestId, amount,
       // feeAmount, netAmount, bankName, bankAccountNumber, bankAccountHolder,
       // status: "PENDING", createdAt, ... } }
@@ -683,10 +686,14 @@ export default function WalletPage() {
         walletService.getWithdrawals(),
       ]);
 
-      setBalance(wallet);
-      setTransactions(tx);
-      setDepositOrders(deposit);
-      setWithdrawals(withdrawalList);
+      setBalance(wallet || null);
+      setTransactions(Array.isArray(tx) ? tx.filter(Boolean) : []);
+      setDepositOrders(Array.isArray(deposit) ? deposit.filter(Boolean) : []);
+      setWithdrawals(
+        Array.isArray(withdrawalList)
+          ? withdrawalList.filter(Boolean)
+          : []
+      );
     } catch (err) {
       console.error(err);
     } finally {
