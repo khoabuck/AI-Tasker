@@ -345,9 +345,6 @@ export default function ProjectDetailPage() {
 
                 <div className="mt-5 flex flex-wrap gap-3">
                   <StatusBadge status={status} />
-
-                  <InfoPill icon="tag" label={projectReference} />
-
                   <InfoPill
                     icon="person"
                     label={project.clientName || "Client"}
@@ -492,7 +489,6 @@ export default function ProjectDetailPage() {
 
             <aside className="space-y-6">
               <Card title="Project summary" icon="monitoring">
-                <Info label="Reference" value={projectReference} />
                 <Info label="Status" value={getProjectStatusLabel(status)} />
                 <Info
                   label="Project value"

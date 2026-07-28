@@ -514,9 +514,6 @@ export default function ContractDetailPage() {
               <div>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   <StatusBadge status={status} contract={contract} />
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-gray-400">
-                    {contractReference}
-                  </span>
                 </div>
 
                 <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
@@ -732,7 +729,6 @@ export default function ContractDetailPage() {
               <PaymentSummary contract={contract} milestones={milestoneDrafts} />
 
               <Card title="Contract details" icon="info">
-                <Info label="Reference" value={contractReference} />
                 <Info label="Status" value={getContractStatusLabel(status, contract)} />
                 <Info label="Client" value={clientName} />
                 <Info

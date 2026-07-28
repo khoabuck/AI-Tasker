@@ -493,11 +493,6 @@ function ProposalRow({
               </span>
             )}
 
-            {contractId && (
-              <span className="rounded-full border border-green-400/30 bg-green-400/10 px-3 py-1 text-xs font-bold text-green-300">
-                Contract #{contractId}
-              </span>
-            )}
           </div>
 
           <h2 className="truncate text-lg font-bold text-white">{title}</h2>
