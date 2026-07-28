@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminService from "../../../services/admin.service";
 
 import { compareDateDesc, formatDateTime } from "../../../utils/dateTime.utils";
+
+// ===== Dashboard fallback data =====
 const EMPTY_SUMMARY = {
   totalUsers: 0,
   totalClients: 0,
@@ -45,7 +48,9 @@ const EMPTY_PLATFORM_WALLET = {
   totalRevenue: 0,
 };
 
+// ===== Admin dashboard page: platform health, finance, and activity =====
 export default function AdminDashboard() {
+  // ===== Dashboard data state =====
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [revenue, setRevenue] = useState(EMPTY_REVENUE);
   const [projects, setProjects] = useState([]);
@@ -58,6 +63,7 @@ export default function AdminDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
+  // ===== Derived project and activity metrics =====
   const projectStatusSummary = useMemo(() => {
     return {
       total: summary.totalProjects || projects.length,
@@ -80,11 +86,7 @@ export default function AdminDashboard() {
     const uniqueMap = new Map();
 
     merged.forEach((item, index) => {
-      const key =
-        item.transactionId ||
-        item.platformTransactionId ||
-        item.id ||
-        `${item.type}-${item.createdAt}-${index}`;
+      const key = getActivityKey(item, index);
 
       uniqueMap.set(key, item);
     });
@@ -98,6 +100,7 @@ export default function AdminDashboard() {
     loadDashboard();
   }, []);
 
+  // ===== API loading: dashboard overview sections =====
   const loadDashboard = async () => {
     try {
       setLoading(true);
@@ -161,6 +164,7 @@ export default function AdminDashboard() {
   const cardStyle =
     "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]";
 
+  // ===== Main render =====
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl">
@@ -175,7 +179,8 @@ export default function AdminDashboard() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Monitor users, projects, finance, disputes, and recent activity.
+              Monitor users, project flow, platform balances, escrow, disputes,
+              and the latest money movement.
             </p>
           </div>
 
@@ -203,7 +208,7 @@ export default function AdminDashboard() {
             <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <SummaryCard
                 icon="groups"
-                label="Total Users"
+                label="Total users"
                 value={formatNumber(summary.totalUsers)}
                 description={`${formatNumber(
                   summary.totalClients
@@ -214,24 +219,27 @@ export default function AdminDashboard() {
 
               <SummaryCard
                 icon="payments"
-                label="Platform Balance"
+                label="Platform available balance"
                 value={formatMoney(
-                  finance.platformAvailableBalance ||
-                    platformWallet.availableBalance
+                  firstNumber(
+                    finance.platformAvailableBalance,
+                    platformWallet.availableBalance,
+                    0
+                  )
                 )}
                 tone="green"
               />
 
               <SummaryCard
                 icon="folder_managed"
-                label="Active Projects"
+                label="Active projects"
                 value={formatNumber(projectStatusSummary.active)}
                 tone="purple"
               />
 
               <SummaryCard
                 icon="gavel"
-                label="Open Disputes"
+                label="Open disputes"
                 value={formatNumber(summary.openDisputes)}
                 tone="yellow"
               />
@@ -254,9 +262,13 @@ export default function AdminDashboard() {
 
               <SummaryCard
                 icon="lock"
-                label="Escrow Locked"
+                label="Escrow locked"
                 value={formatMoney(
-                  finance.totalEscrowLocked || summary.escrowLockedAmount
+                  firstNumber(
+                    finance.totalEscrowLocked,
+                    summary.escrowLockedAmount,
+                    0
+                  )
                 )}
                 tone="purple"
               />
@@ -265,8 +277,11 @@ export default function AdminDashboard() {
                 icon="pending_actions"
                 label="Pending payouts"
                 value={formatNumber(
-                  finance.pendingWithdrawalCount ||
-                    summary.pendingWithdrawalCount
+                  firstNumber(
+                    finance.pendingWithdrawalCount,
+                    summary.pendingWithdrawalCount,
+                    0
+                  )
                 )}
                 tone="yellow"
               />
@@ -275,36 +290,49 @@ export default function AdminDashboard() {
             <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
               <SnapshotCard
                 title="Finance"
-                subtitle="Current financial summary"
+                subtitle="Revenue, escrow, and pending payout snapshot"
                 icon="monitoring"
                 items={[
                   {
-                    label: "Revenue",
+                    label: "Total platform revenue",
                     value: formatMoney(
-                      finance.platformTotalRevenue ||
-                        platformWallet.totalRevenue ||
-                        revenue.platformFeeCollected
+                      firstNumber(
+                        finance.platformTotalRevenue,
+                        platformWallet.totalRevenue,
+                        revenue.platformFeeCollected,
+                        0
+                      )
                     ),
                   },
                   {
-                    label: "Platform Fee",
+                    label: "Platform fee revenue",
                     value: formatMoney(
-                      finance.platformFeeRevenue ||
-                        revenue.platformFeeCollected ||
-                        revenue.platformFeeExpected
+                      firstNumber(
+                        finance.platformFeeRevenue,
+                        revenue.platformFeeCollected,
+                        revenue.platformFeeExpected,
+                        0
+                      )
                     ),
                   },
                   {
-                    label: "Escrow Locked",
+                    label: "Escrow locked",
                     value: formatMoney(
-                      finance.totalEscrowLocked || summary.escrowLockedAmount
+                      firstNumber(
+                        finance.totalEscrowLocked,
+                        summary.escrowLockedAmount,
+                        0
+                      )
                     ),
                   },
                   {
                     label: "Pending payouts",
                     value: formatMoney(
-                      finance.pendingWithdrawalAmount ||
-                        summary.pendingWithdrawalAmount
+                      firstNumber(
+                        finance.pendingWithdrawalAmount,
+                        summary.pendingWithdrawalAmount,
+                        0
+                      )
                     ),
                   },
                 ]}
@@ -312,11 +340,11 @@ export default function AdminDashboard() {
 
               <SnapshotCard
                 title="Projects"
-                subtitle="Current project summary"
+                subtitle="Project pipeline and risk status"
                 icon="folder_copy"
                 items={[
                   {
-                    label: "Total Projects",
+                    label: "Total projects",
                     value: formatNumber(projectStatusSummary.total),
                   },
                   {
@@ -343,13 +371,26 @@ export default function AdminDashboard() {
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-400">
-                    Latest financial activity.
+                    Latest money movements, marked by how they affect platform
+                    revenue, escrow, and user-held balances.
                   </p>
                 </div>
 
-                <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-300">
-                  {recentActivity.length} items
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-300">
+                    Latest {recentActivity.length} items
+                  </span>
+
+                  <Link
+                    to="/admin/dashboard/recent-activity"
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold uppercase tracking-wider text-gray-300 transition hover:border-cyan-400/30 hover:text-cyan-300"
+                  >
+                    View all activity
+                    <span className="material-symbols-outlined text-sm">
+                      arrow_forward
+                    </span>
+                  </Link>
+                </div>
               </div>
 
               {recentActivity.length === 0 ? (
@@ -360,8 +401,9 @@ export default function AdminDashboard() {
                 />
               ) : (
                 <div className="overflow-hidden rounded-xl border border-white/10">
-                  <div className="hidden grid-cols-[1.4fr_1fr_1fr_120px] border-b border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 md:grid">
+                  <div className="hidden grid-cols-[1.35fr_0.8fr_1fr_0.9fr_120px] border-b border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 md:grid">
                     <span>Activity</span>
+                    <span>Impact</span>
                     <span>Amount</span>
                     <span>Status</span>
                     <span className="text-right">Date</span>
@@ -370,12 +412,7 @@ export default function AdminDashboard() {
                   <div className="divide-y divide-white/10">
                     {recentActivity.map((item, index) => (
                       <ActivityRow
-                        key={
-                          item.transactionId ||
-                          item.platformTransactionId ||
-                          item.id ||
-                          index
-                        }
+                        key={getActivityKey(item, index)}
                         item={item}
                       />
                     ))}
@@ -391,6 +428,7 @@ export default function AdminDashboard() {
 }
 
 
+// ===== Loading skeleton =====
 function PageSkeleton({ cards = 4, admin = false }) {
   return (
     <div className="animate-pulse px-5 py-8 md:px-8">
@@ -419,6 +457,7 @@ function PageSkeleton({ cards = 4, admin = false }) {
 }
 
 
+// ===== Top-level dashboard metric card =====
 function SummaryCard({
   icon,
   label,
@@ -436,11 +475,10 @@ function SummaryCard({
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)] transition hover:border-cyan-400/20">
       <div
-        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
-          toneClass[tone] || toneClass.cyan
-        }`}
+        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${toneClass[tone] || toneClass.cyan
+          }`}
       >
         <span className="material-symbols-outlined">{icon}</span>
       </div>
@@ -458,6 +496,7 @@ function SummaryCard({
   );
 }
 
+// ===== Snapshot card for grouped finance/project data =====
 function SnapshotCard({ title, subtitle, icon, items }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
@@ -489,22 +528,74 @@ function SnapshotCard({ title, subtitle, icon, items }) {
   );
 }
 
+// ===== Recent activity row =====
 function ActivityRow({ item }) {
-  const type = item.type || item.transactionType || "ACTIVITY";
-  const status = item.status || "UNKNOWN";
+  const type = String(
+    item.type || item.transactionType || "ACTIVITY"
+  )
+    .trim()
+    .toUpperCase();
+
+  const status = String(item.status || "UNKNOWN")
+    .trim()
+    .toUpperCase();
+
+  const amount = Math.abs(Number(item.amount || 0));
+  const impact = getMoneyImpact(item, type);
+
+  const amountPrefix =
+    impact.direction === "IN"
+      ? "+"
+      : impact.direction === "OUT"
+        ? "-"
+        : "";
+
+  const amountClass =
+    impact.direction === "IN"
+      ? "text-green-300"
+      : impact.direction === "OUT"
+        ? "text-red-300"
+        : "text-white";
+
+  const title = getActivityTitle(item, type);
+
+  const description = getActivityDescription(item, type, impact);
 
   return (
-    <div className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1.4fr_1fr_1fr_120px] md:items-center">
+    <div className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1.35fr_0.8fr_1fr_0.9fr_120px] md:items-center">
       <div className="min-w-0">
-        <p className="truncate font-bold text-white">{formatLabel(type)}</p>
-        {item.description && (
-          <p className="mt-1 truncate text-xs text-gray-500">
-            {item.description}
+        <p className="truncate font-bold text-white">{title}</p>
+
+        {description && (
+          <p
+            className="mt-1 text-xs leading-5 text-gray-400"
+            title={description}
+            style={{
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              wordBreak: "break-word",
+            }}
+          >
+            {description}
           </p>
         )}
       </div>
 
-      <div className="font-bold text-white">{formatMoney(item.amount)}</div>
+      <div>
+        <span
+          className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase ${impact.className}`}
+          title={impact.helpText}
+        >
+          {impact.label}
+        </span>
+      </div>
+
+      <div className={`font-extrabold ${amountClass}`}>
+        {amountPrefix}
+        {formatMoney(amount)}
+      </div>
 
       <div>
         <span
@@ -523,6 +614,20 @@ function ActivityRow({ item }) {
   );
 }
 
+function getActivityKey(item, index) {
+  const source = String(
+    item?.source || (item?.platformTransactionId ? "PLATFORM" : "USER_WALLET")
+  ).toLowerCase();
+
+  const id =
+    item?.platformTransactionId ||
+    item?.transactionId ||
+    item?.id ||
+    `${item?.type || "activity"}-${item?.createdAt || index}`;
+
+  return `${source}-${id}`;
+}
+
 function EmptyState({ icon, title, description }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] p-10 text-center">
@@ -534,6 +639,267 @@ function EmptyState({ icon, title, description }) {
 
       <p className="mt-2 text-sm text-gray-400">{description}</p>
     </div>
+  );
+}
+
+function firstNumber(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+
+    const number = Number(value);
+
+    if (Number.isFinite(number)) {
+      return number;
+    }
+  }
+
+  return 0;
+}
+
+function getMoneyImpact(item, normalizedType = "") {
+  const explicitDirection = String(
+    item?.direction ||
+    item?.flowDirection ||
+    item?.transactionDirection ||
+    ""
+  )
+    .trim()
+    .toUpperCase();
+
+  if (["IN", "CREDIT", "INCOME", "PLUS"].includes(explicitDirection)) {
+    return buildMoneyImpact("IN", "Money +", "Explicit positive money movement.");
+  }
+
+  if (["OUT", "DEBIT", "EXPENSE", "MINUS"].includes(explicitDirection)) {
+    return buildMoneyImpact("OUT", "Money -", "Explicit negative money movement.");
+  }
+
+  const type = String(normalizedType || "")
+    .trim()
+    .toUpperCase();
+
+  if (type.includes("ESCROW_LOCK")) {
+    return buildMoneyImpact(
+      "IN",
+      "Escrow +",
+      "Client funds were locked into escrow."
+    );
+  }
+
+  if (type.includes("ESCROW_FREEZE")) {
+    return buildMoneyImpact(
+      "IN",
+      "Frozen +",
+      "Disputed funds are frozen and still held by the platform."
+    );
+  }
+
+  if (type.includes("ESCROW_RELEASE")) {
+    return buildMoneyImpact(
+      "OUT",
+      "Escrow -",
+      "Locked escrow funds were released out of escrow."
+    );
+  }
+
+  if (type.includes("ESCROW_RECEIVE") || type.includes("ESCROW_RECEIVED")) {
+    return buildMoneyImpact(
+      "OUT",
+      "Escrow -",
+      "Escrow funds were received by the expert."
+    );
+  }
+
+  if (type.includes("PENDING_EARNING_RELEASE")) {
+    return buildMoneyImpact(
+      "OUT",
+      "Pending -",
+      "Held expert earnings became available to the expert."
+    );
+  }
+
+  if (type.includes("PENDING_EARNING_REFUND")) {
+    return buildMoneyImpact(
+      "OUT",
+      "Pending -",
+      "Held expert earnings were removed because the client was refunded."
+    );
+  }
+
+  if (type.includes("PENDING_EARNING_HOLD")) {
+    return buildMoneyImpact(
+      "IN",
+      "Pending +",
+      "Expert net earnings are held until project completion."
+    );
+  }
+
+  if (
+    type.includes("PLATFORM_FEE") ||
+    type.includes("SERVICE_FEE") ||
+    type.includes("WITHDRAWAL_FEE")
+  ) {
+    return buildMoneyImpact(
+      "IN",
+      "Revenue +",
+      "Fee revenue was added to the platform."
+    );
+  }
+
+  if (
+    type.includes("DEPOSIT") ||
+    type.includes("PACKAGE_PURCHASE") ||
+    type.includes("JOB_CREDIT_PACKAGE_PURCHASE") ||
+    type.includes("PROPOSAL_CREDIT_PACKAGE_PURCHASE")
+  ) {
+    return buildMoneyImpact(
+      "IN",
+      "Wallet +",
+      "A user added money or purchased credits on the platform."
+    );
+  }
+
+  if (
+    type.includes("WITHDRAWAL_REJECTED") ||
+    type.includes("WITHDRAWAL_EXPIRED") ||
+    type.includes("WITHDRAWAL_FAILED") ||
+    type.includes("PAYOUT_FAILED")
+  ) {
+    return buildMoneyImpact(
+      "OUT",
+      "Hold -",
+      "Previously held withdrawal funds were released back to the user."
+    );
+  }
+
+  if (type.includes("WITHDRAWAL_HOLD")) {
+    return buildMoneyImpact(
+      "IN",
+      "Hold +",
+      "User withdrawal funds were locked while payout is reviewed."
+    );
+  }
+
+  if (
+    type.includes("REFUND") ||
+    type.includes("WITHDRAWAL_PAID") ||
+    type.includes("PAYOUT") ||
+    type.includes("PLATFORM_REFUND") ||
+    type.includes("CLIENT_REFUND")
+  ) {
+    return buildMoneyImpact(
+      "OUT",
+      "Money -",
+      "Funds left the platform balance or were returned to a user."
+    );
+  }
+
+  const signedAmount = Number(item?.amount || 0);
+
+  if (signedAmount > 0) {
+    return buildMoneyImpact("IN", "Money +", "Positive wallet movement.");
+  }
+
+  if (signedAmount < 0) {
+    return buildMoneyImpact("OUT", "Money -", "Negative wallet movement.");
+  }
+
+  return buildMoneyImpact("NEUTRAL", "No change", "No clear money movement.");
+}
+
+function buildMoneyImpact(direction, label, helpText) {
+  const className =
+    direction === "IN"
+      ? "border-green-400/30 bg-green-400/10 text-green-300"
+      : direction === "OUT"
+        ? "border-red-400/30 bg-red-400/10 text-red-300"
+        : "border-white/15 bg-white/[0.04] text-gray-300";
+
+  return {
+    direction,
+    label,
+    helpText,
+    className,
+  };
+}
+
+function getActivityTitle(item, type) {
+  if (type.includes("ESCROW_LOCK")) return "Client funds locked";
+  if (type.includes("ESCROW_RELEASE")) return "Escrow released";
+  if (type.includes("ESCROW_RECEIVE") || type.includes("ESCROW_RECEIVED")) {
+    return "Expert received escrow";
+  }
+  if (type.includes("ESCROW_FREEZE")) return "Escrow frozen";
+  if (type.includes("PENDING_EARNING_RELEASE")) return "Expert earning released";
+  if (type.includes("PENDING_EARNING_HOLD")) return "Expert earning held";
+  if (type.includes("PENDING_EARNING_REFUND")) return "Expert earning refunded";
+  if (type.includes("EXPERT_SERVICE_FEE")) return "Expert service fee collected";
+  if (type.includes("PLATFORM_FEE")) return "Platform fee collected";
+  if (type.includes("WITHDRAWAL_HOLD")) return "Withdrawal funds held";
+  if (type.includes("PAYOUT_PROCESSING")) return "Withdrawal payout processing";
+  if (type.includes("PAYOUT_FAILED")) return "Withdrawal payout failed";
+  if (type.includes("WITHDRAWAL_PAID")) return "Withdrawal paid";
+  if (type.includes("WITHDRAWAL_REJECTED")) return "Withdrawal rejected";
+  if (type.includes("WITHDRAWAL_EXPIRED")) return "Withdrawal expired";
+  if (type.includes("WITHDRAWAL_FAILED")) return "Withdrawal failed";
+  if (type.includes("REFUND")) return "Refund processed";
+  if (type.includes("DEPOSIT")) return "Wallet deposit";
+  if (type.includes("JOB_CREDIT_PACKAGE_PURCHASE")) {
+    return "Job credit package purchased";
+  }
+  if (type.includes("PROPOSAL_CREDIT_PACKAGE_PURCHASE")) {
+    return "Proposal credit package purchased";
+  }
+
+  return item?.displayTitle || item?.referenceDisplayName || formatLabel(type);
+}
+
+function getActivityDescription(item, type, impact) {
+  const reference =
+    item?.referenceDisplayName ||
+    item?.projectTitle ||
+    item?.milestoneTitle ||
+    item?.jobTitle ||
+    "";
+
+  const suffix = reference ? ` Reference: ${reference}.` : "";
+
+  if (type.includes("ESCROW_LOCK")) {
+    return `Client money was moved from available balance into locked escrow.${suffix}`;
+  }
+
+  if (type.includes("ESCROW_RELEASE")) {
+    return `Locked escrow was released, so the escrow balance goes down.${suffix}`;
+  }
+
+  if (type.includes("ESCROW_RECEIVE") || type.includes("ESCROW_RECEIVED")) {
+    return `Escrow money was received by the expert, so platform-held escrow goes down.${suffix}`;
+  }
+
+  if (type.includes("PLATFORM_FEE") || type.includes("SERVICE_FEE")) {
+    return `Fee income was collected by the platform.${suffix}`;
+  }
+
+  if (type.includes("DEPOSIT")) {
+    return `A user topped up their wallet balance.${suffix}`;
+  }
+
+  if (type.includes("PACKAGE_PURCHASE")) {
+    return `A user paid for a credit package.${suffix}`;
+  }
+
+  if (type.includes("REFUND")) {
+    return `Funds were returned to the client or removed from held earnings.${suffix}`;
+  }
+
+  return (
+    item?.displayDescription ||
+    item?.displaySubtitle ||
+    item?.description ||
+    impact.helpText ||
+    ""
   );
 }
 

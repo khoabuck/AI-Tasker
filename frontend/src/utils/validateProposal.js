@@ -32,8 +32,6 @@ export const validateProposalMilestones = (milestones = []) => {
 
     if (!title) {
       errors.title = "Milestone title is required.";
-    } else if (title.length < 3) {
-      errors.title = "Milestone title must be at least 3 characters.";
     }
 
     if (isEmpty(milestone.amount)) {
@@ -67,11 +65,13 @@ export const validateProposalForm = (formData = {}, options = {}) => {
   const errors = {};
   const price = toNumber(formData.proposedPrice);
   const timeline = toNumber(formData.proposedTimelineDays);
+  const maxMilestones = Number(
+    options.maxMilestones ?? options.proposalMilestoneLimit ?? 0
+  );
+  const resubmitNoteMaxLength = Number(options.resubmitNoteMaxLength ?? 0);
 
   if (isEmpty(formData.coverLetter)) {
     errors.coverLetter = "Cover letter is required.";
-  } else if (String(formData.coverLetter).trim().length < 30) {
-    errors.coverLetter = "Cover letter must be at least 30 characters.";
   }
 
   if (isEmpty(formData.proposedPrice)) {
@@ -89,27 +89,22 @@ export const validateProposalForm = (formData = {}, options = {}) => {
 
   if (isEmpty(formData.expectedOutputs)) {
     errors.expectedOutputs = "Expected outputs are required.";
-  } else if (String(formData.expectedOutputs).trim().length < 20) {
-    errors.expectedOutputs = "Expected outputs must be at least 20 characters.";
   }
 
   if (isEmpty(formData.workingApproach)) {
     errors.workingApproach = "Working approach is required.";
-  } else if (String(formData.workingApproach).trim().length < 30) {
-    errors.workingApproach = "Working approach must be at least 30 characters.";
-  }
-
-  if (isEmpty(formData.preliminaryMilestonePlan)) {
-    errors.preliminaryMilestonePlan = "Preliminary milestone plan is required.";
-  } else if (String(formData.preliminaryMilestonePlan).trim().length < 20) {
-    errors.preliminaryMilestonePlan =
-      "Preliminary milestone plan must be at least 20 characters.";
   }
 
   const milestones = Array.isArray(formData.milestones)
     ? formData.milestones
     : [];
   const milestoneErrors = validateProposalMilestones(milestones);
+
+  if (Number.isFinite(maxMilestones) && maxMilestones > 0) {
+    if (milestones.length > maxMilestones) {
+      errors.milestonesLimit = `A proposal cannot have more than ${maxMilestones} milestones.`;
+    }
+  }
 
   if (hasMilestoneErrors(milestoneErrors)) {
     errors.milestones = milestoneErrors;
@@ -143,12 +138,13 @@ export const validateProposalForm = (formData = {}, options = {}) => {
       "The total milestone duration cannot exceed the proposed timeline.";
   }
 
-  if (options.isResubmit) {
-    if (isEmpty(formData.resubmitNote)) {
-      errors.resubmitNote = "Resubmit note is required.";
-    } else if (String(formData.resubmitNote).trim().length < 10) {
-      errors.resubmitNote = "Resubmit note must be at least 10 characters.";
-    }
+  if (
+    options.isResubmit &&
+    Number.isFinite(resubmitNoteMaxLength) &&
+    resubmitNoteMaxLength > 0 &&
+    String(formData.resubmitNote || "").trim().length > resubmitNoteMaxLength
+  ) {
+    errors.resubmitNote = `Resubmit note cannot exceed ${resubmitNoteMaxLength} characters.`;
   }
 
   return errors;

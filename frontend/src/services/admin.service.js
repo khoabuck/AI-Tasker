@@ -328,15 +328,39 @@ const normalizeRevenueTransaction = (item, index = 0) => {
       index
     ),
     userId: getValue(item.userId, item.UserId, ""),
+    contractId: getValue(item.contractId, item.ContractId, ""),
+    contractTitle: getValue(item.contractTitle, item.ContractTitle, ""),
+    proposalId: getValue(item.proposalId, item.ProposalId, ""),
+    proposalTitle: getValue(item.proposalTitle, item.ProposalTitle, ""),
+    jobId: getValue(item.jobId, item.JobId, ""),
+    jobTitle: getValue(item.jobTitle, item.JobTitle, ""),
     projectId: getValue(item.projectId, item.ProjectId, ""),
+    projectTitle: getValue(item.projectTitle, item.ProjectTitle, ""),
     milestoneId: getValue(item.milestoneId, item.MilestoneId, ""),
+    milestoneTitle: getValue(item.milestoneTitle, item.MilestoneTitle, ""),
     escrowId: getValue(item.escrowId, item.EscrowId, ""),
     type: getValue(item.type, item.Type, "UNKNOWN"),
+    category: getValue(item.category, item.Category, ""),
+    statusGroup: getValue(item.statusGroup, item.StatusGroup, ""),
     amount: toNumber(getValue(item.amount, item.Amount, 0)),
     status: getValue(item.status, item.Status, "UNKNOWN"),
     description: getValue(item.description, item.Description, ""),
+    displayTitle: getValue(item.displayTitle, item.DisplayTitle, ""),
+    displaySubtitle: getValue(item.displaySubtitle, item.DisplaySubtitle, ""),
+    displayDescription: getValue(
+      item.displayDescription,
+      item.DisplayDescription,
+      ""
+    ),
+    referenceType: getValue(item.referenceType, item.ReferenceType, ""),
+    referenceDisplayName: getValue(
+      item.referenceDisplayName,
+      item.ReferenceDisplayName,
+      ""
+    ),
     referenceId: getValue(item.referenceId, item.ReferenceId, ""),
     createdAt: getValue(item.createdAt, item.CreatedAt, ""),
+    source: "USER_WALLET",
     raw: item,
   };
 };
@@ -519,7 +543,13 @@ const normalizePlatformTransaction = (item, index = 0) => {
     ),
     platformWalletId: getValue(item.platformWalletId, item.PlatformWalletId, ""),
     projectId: getValue(item.projectId, item.ProjectId, ""),
+    projectTitle: getValue(item.projectTitle, item.ProjectTitle, ""),
     contractId: getValue(item.contractId, item.ContractId, ""),
+    contractTitle: getValue(item.contractTitle, item.ContractTitle, ""),
+    proposalId: getValue(item.proposalId, item.ProposalId, ""),
+    proposalTitle: getValue(item.proposalTitle, item.ProposalTitle, ""),
+    jobId: getValue(item.jobId, item.JobId, ""),
+    jobTitle: getValue(item.jobTitle, item.JobTitle, ""),
     withdrawalRequestId: getValue(
       item.withdrawalRequestId,
       item.WithdrawalRequestId,
@@ -530,8 +560,22 @@ const normalizePlatformTransaction = (item, index = 0) => {
     amount: toNumber(getValue(item.amount, item.Amount, 0)),
     status: getValue(item.status, item.Status, "UNKNOWN"),
     description: getValue(item.description, item.Description, ""),
+    displayTitle: getValue(item.displayTitle, item.DisplayTitle, ""),
+    displaySubtitle: getValue(item.displaySubtitle, item.DisplaySubtitle, ""),
+    displayDescription: getValue(
+      item.displayDescription,
+      item.DisplayDescription,
+      ""
+    ),
+    referenceType: getValue(item.referenceType, item.ReferenceType, ""),
+    referenceDisplayName: getValue(
+      item.referenceDisplayName,
+      item.ReferenceDisplayName,
+      ""
+    ),
     referenceId: getValue(item.referenceId, item.ReferenceId, ""),
     createdAt: getValue(item.createdAt, item.CreatedAt, ""),
+    source: "PLATFORM",
     raw: item,
   };
 };

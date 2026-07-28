@@ -14,6 +14,8 @@ export default function OAuthCallbackPage() {
   useEffect(() => {
     let cancelled = false;
 
+
+    //tự kiểm tra phiên Google Login → lấy user từ Backend → cập nhật AuthContext → chuyển user đến đúng trang.
     const handleOAuthCallback = async () => {
       try {
         setError("");
@@ -51,16 +53,18 @@ export default function OAuthCallbackPage() {
           );
         }
 
-        /*
-         * Cập nhật AuthContext và lưu user cache theo auth flow hiện tại.
-         * Không tự ghi localStorage ở page này.
-         */
         handleLoginSuccess({
           user,
         });
 
-        navigate(getNextPath(user), {
+        const nextPath = getNextPath(user);
+
+        navigate(nextPath, {
           replace: true,
+          state:
+            nextPath === "/verify-email-notice"
+              ? { email: user.email }
+              : undefined,
         });
       } catch (err) {
         if (cancelled) return;
@@ -218,6 +222,16 @@ function getNextPath(user) {
     }
 
     return "/select-role";
+  }
+
+  if (
+    role === "CLIENT" &&
+    [
+      "BUSINESS_NEEDS_CORRECTION",
+      "BUSINESS_VERIFICATION_LOCKED",
+    ].includes(status)
+  ) {
+    return "/setup-profile";
   }
 
   if (status === "ACTIVE") {

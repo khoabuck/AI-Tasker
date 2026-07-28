@@ -684,7 +684,7 @@ const expertProfileService = {
   async getExpertProfileById(expertProfileId) {
     try {
       const response = await axiosInstance.get(
-        `/expert-profiles/${expertProfileId}`
+        `/experts/${expertProfileId}`
       );
       return normalizeExpertProfile(unwrapData(response));
     } catch (error) {

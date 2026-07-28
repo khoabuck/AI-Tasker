@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom"; // Dùng lấy dữ liệu được truyền từ trang trước.
 import { resendVerificationEmailApi } from "../../../api/auth.api";
 import { getErrorMessage } from "../../../utils/auth.utils";
 
@@ -11,7 +11,7 @@ const AUTO_REDIRECT_SECONDS = 8;
 export default function VerifyEmailNoticePage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const email = location.state?.email || "";
+  const email = location.state?.email || ""; //Nếu state tồn tại thì lấy email, không thì bỏ qua
 
   const [status, setStatus] = useState("");
   const [message, setMessage] = useState("");
@@ -30,7 +30,7 @@ export default function VerifyEmailNoticePage() {
       setStatus("");
       setMessage("");
 
-      const data = await resendVerificationEmailApi({ email });
+      const data = await resendVerificationEmailApi({ email }); // gọi API resend
 
       setStatus("success");
       setMessage(data?.message || "Verification email has been resent.");
@@ -42,9 +42,7 @@ export default function VerifyEmailNoticePage() {
     }
   };
 
-  // Đăng ký xong → vào trang này → tự động chuyển sang /login sau vài giây,
-  // để user tự đăng nhập bất cứ lúc nào sau khi họ bấm link xác thực trong email
-  // (không bắt họ kẹt lại ở màn "Check your inbox").
+  //Tự redirect sau 8 giây.
   useEffect(() => {
     const countdownInterval = setInterval(() => {
       setSecondsLeft((prev) => {
@@ -60,7 +58,7 @@ export default function VerifyEmailNoticePage() {
       navigate("/login");
     }, AUTO_REDIRECT_SECONDS * 1000);
 
-    return () => {
+    return () => { // khi ch hết 8s là user bấm login bị lõi nên có 2 code dưới tránh lỗi memory leak
       clearInterval(countdownInterval);
       clearTimeout(redirectTimer);
     };
@@ -103,6 +101,7 @@ export default function VerifyEmailNoticePage() {
             We&apos;ve sent a verification link to
           </p>
 
+          {/*Email*/}
           {email ? (
             <p className="mb-5 break-all font-mono text-sm font-semibold text-[#00F0FF]">
               {email}

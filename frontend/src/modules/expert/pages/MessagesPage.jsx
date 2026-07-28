@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import conversationService from "../../../services/conversation.service";
 import authService from "../../../services/auth.service";
+import uploadService from "../../../services/upload.service";
 import { formatTime } from "../../../utils/dateTime.utils";
 
 const MESSAGE_POLL_INTERVAL_MS = 2000;
@@ -24,10 +25,12 @@ export default function MessagesPage() {
   const [loadingConversations, setLoadingConversations] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
 
   const [error, setError] = useState("");
 
   const messagesEndRef = useRef(null);
+  const imageInputRef = useRef(null);
   const pollingMessagesRef = useRef(false);
   const pollingConversationsRef = useRef(false);
 
@@ -281,6 +284,53 @@ export default function MessagesPage() {
     }
   };
 
+  const handleImageSelected = async (event) => {
+    const file = event.target.files?.[0];
+
+    if (event.target) {
+      event.target.value = "";
+    }
+
+    if (!file) return;
+
+    if (!selectedConversation) {
+      setError("Please select a conversation first.");
+      return;
+    }
+
+    if (!file.type?.startsWith("image/")) {
+      setError("Please select a valid image file.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image size cannot exceed 5MB.");
+      return;
+    }
+
+    try {
+      setUploadingAttachment(true);
+      setError("");
+
+      const conversationId = getConversationId(selectedConversation);
+      const attachmentUrl = await uploadService.uploadImage(file, "images");
+
+      await conversationService.sendMessage(conversationId, {
+        content: "[Image]",
+        messageType: "FILE",
+        attachmentUrl,
+      });
+
+      await loadMessages(conversationId, { silent: true });
+      await refreshConversationsOnly();
+    } catch (err) {
+      console.error("UPLOAD MESSAGE IMAGE ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot send image."));
+    } finally {
+      setUploadingAttachment(false);
+    }
+  };
+
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
       messagesEndRef.current?.scrollIntoView({
@@ -492,6 +542,10 @@ export default function MessagesPage() {
                     {!loadingMessages &&
                       messages.map((message, index) => {
                         const mine = isMyMessage(message, user);
+                        const content = getMessageContent(message);
+                        const attachmentUrl = getMessageAttachmentUrl(message);
+                        const hasVisibleText =
+                          content && content.trim().toLowerCase() !== "[image]";
 
                         return (
                           <div
@@ -513,9 +567,23 @@ export default function MessagesPage() {
                                 </p>
                               )}
 
-                              <p className="whitespace-pre-line text-sm leading-6">
-                                {getMessageContent(message)}
-                              </p>
+                              {attachmentUrl && (
+                                <MessageAttachment
+                                  message={message}
+                                  attachmentUrl={attachmentUrl}
+                                  mine={mine}
+                                />
+                              )}
+
+                              {hasVisibleText && (
+                                <p
+                                  className={`whitespace-pre-line text-sm leading-6 ${
+                                    attachmentUrl ? "mt-2" : ""
+                                  }`}
+                                >
+                                  {content}
+                                </p>
+                              )}
 
                               <p
                                 className={`mt-2 text-right text-[11px] ${
@@ -536,6 +604,14 @@ export default function MessagesPage() {
                     onSubmit={handleSendMessage}
                     className="shrink-0 border-t border-white/10 p-5"
                   >
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageSelected}
+                    />
+
                     <div className="flex gap-3">
                       <input
                         type="text"
@@ -548,11 +624,35 @@ export default function MessagesPage() {
                       />
 
                       <button
+                        type="button"
+                        onClick={() => imageInputRef.current?.click()}
+                        disabled={
+                          sending ||
+                          uploadingAttachment ||
+                          !selectedConversationId
+                        }
+                        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-gray-400 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        title="Send image"
+                      >
+                        <span className="material-symbols-outlined text-xl">
+                          {uploadingAttachment ? "hourglass_top" : "image"}
+                        </span>
+                      </button>
+
+                      <button
                         type="submit"
-                        disabled={sending || !messageInput.trim()}
+                        disabled={
+                          sending ||
+                          uploadingAttachment ||
+                          !messageInput.trim()
+                        }
                         className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-6 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        {sending ? "Sending..." : "Send"}
+                        {sending
+                          ? "Sending..."
+                          : uploadingAttachment
+                            ? "Uploading..."
+                            : "Send"}
                       </button>
                     </div>
                   </form>
@@ -563,6 +663,45 @@ export default function MessagesPage() {
         </div>
       </div>
     </ExpertLayout>
+  );
+}
+
+function MessageAttachment({ message, attachmentUrl, mine }) {
+  const isImage = isImageAttachment(message, attachmentUrl);
+
+  if (isImage) {
+    return (
+      <a
+        href={attachmentUrl}
+        target="_blank"
+        rel="noreferrer"
+        className="block"
+      >
+        <img
+          src={attachmentUrl}
+          alt="Message attachment"
+          className={`max-h-64 max-w-full rounded-xl object-contain ${
+            mine ? "border border-black/10" : "border border-white/10"
+          }`}
+        />
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={attachmentUrl}
+      target="_blank"
+      rel="noreferrer"
+      className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold transition ${
+        mine
+          ? "bg-black/10 text-black hover:bg-black/20"
+          : "bg-white/[0.06] text-cyan-300 hover:bg-white/[0.1]"
+      }`}
+    >
+      <span className="material-symbols-outlined text-lg">attach_file</span>
+      View attachment
+    </a>
   );
 }
 
@@ -614,15 +753,20 @@ function getConversationEmail(conversation) {
 }
 
 function getLastMessage(conversation) {
-  return (
+  const lastMessage =
     conversation?.lastMessage ||
     conversation?.LastMessage ||
     conversation?.latestMessage ||
     conversation?.LatestMessage ||
     conversation?.messagePreview ||
     conversation?.MessagePreview ||
-    "No message yet"
-  );
+    "";
+
+  if (String(lastMessage).trim().toLowerCase() === "[image]") {
+    return "Image attachment";
+  }
+
+  return lastMessage || "No message yet";
 }
 
 function getConversationUpdatedAt(conversation) {
@@ -653,6 +797,24 @@ function getMessageContent(message) {
   );
 }
 
+function getMessageType(message) {
+  return String(message?.messageType || message?.MessageType || "")
+    .trim()
+    .toUpperCase();
+}
+
+function getMessageAttachmentUrl(message) {
+  return (
+    message?.attachmentUrl ||
+    message?.AttachmentUrl ||
+    message?.fileUrl ||
+    message?.FileUrl ||
+    message?.imageUrl ||
+    message?.ImageUrl ||
+    ""
+  );
+}
+
 function getMessageSenderId(message) {
   return (
     message?.senderId ||
@@ -674,6 +836,20 @@ function getMessageCreatedAt(message) {
     message?.CreatedDate ||
     ""
   );
+}
+
+function isImageAttachment(message, attachmentUrl = "") {
+  const content = getMessageContent(message).trim().toLowerCase();
+  const messageType = getMessageType(message);
+  const url = String(attachmentUrl || getMessageAttachmentUrl(message));
+
+  if (!url) return false;
+
+  if (content === "[image]") return true;
+
+  if (messageType === "IMAGE") return true;
+
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
 }
 
 function isMyMessage(message, user) {
@@ -724,6 +900,8 @@ function isSameMessageList(currentMessages, nextMessages) {
   return (
     String(getMessageId(currentLast)) === String(getMessageId(nextLast)) &&
     String(getMessageContent(currentLast)) === String(getMessageContent(nextLast)) &&
+    String(getMessageAttachmentUrl(currentLast)) ===
+      String(getMessageAttachmentUrl(nextLast)) &&
     String(getMessageCreatedAt(currentLast)) ===
       String(getMessageCreatedAt(nextLast))
   );

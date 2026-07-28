@@ -6,7 +6,6 @@ const BG_IMAGE = "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ck
 export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-
   const successParam = searchParams.get("success");
   const messageParam = searchParams.get("message");
   const isSuccess = successParam === "true";

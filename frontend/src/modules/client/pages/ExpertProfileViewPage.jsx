@@ -8,6 +8,8 @@
 //   experienceVerificationStatus, experienceVerificationNote, availableForWork,
 //   portfolioUrl, linkedInUrl, gitHubUrl, expertCategory, profileScore, level,
 //   profileReviewStatus, verifiedAt, createdAt, updatedAt,
+//   averageRating, totalReviews,
+//   reviews: [{ reviewId, rating, comment, isVerifiedProjectReview, createdAt }],
 //   expertSkills: [{ skillId, skillName, category, skillLevel, yearsOfExperience, isPrimary }],
 //   certificates: []
 // }
@@ -26,14 +28,28 @@ const SKILL_LEVEL_COLOR = {
   EXPERT:       "text-indigo-300",
 };
 
-function StarRating({ rating }) {
+function StarRating({ rating, sizeClass = "text-[18px]" }) {
+  const safeRating = Math.max(
+    0,
+    Math.min(5, Number(rating ?? 0))
+  );
+
   return (
-    <div className="flex gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <span key={i} className="material-symbols-outlined text-[18px] text-cyan-400" style={{ fontVariationSettings: "'FILL' 1" }}>
-          {i <= Math.floor(rating) ? "star" : i - 0.5 <= rating ? "star_half" : "star_outline"}
-        </span>
-      ))}
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const isActive = star <= Math.floor(safeRating);
+
+        return (
+          <span
+            key={star}
+            className={`${sizeClass} leading-none ${
+              isActive ? "text-yellow-400" : "text-gray-600"
+            }`}
+          >
+            {isActive ? "★" : "☆"}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -62,6 +78,7 @@ export default function ExpertProfileViewPage() {
   const [expert, setExpert] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [connectError, setConnectError] = useState("");
 
   const fetchExpert = useCallback(async (signal) => {
     setLoading(true);
@@ -97,53 +114,78 @@ export default function ExpertProfileViewPage() {
 // Có hội thoại cũ với expert này thì vào thẳng, chưa có thì đưa sang Messages
 // kèm thông tin expert để user tự gõ và gửi tin đầu tiên.
   const handleConnect = async () => {
-    if (!expert) return;
-    try {
-      const existing = await findExistingConversationWithExpert(axiosInstance, {
+  if (!expert) return;
+
+  setConnectError("");
+
+  try {
+    const existing = await findExistingConversationWithExpert(
+      axiosInstance,
+      {
         expertUserId: expert.userId,
-      });
-
-      if (existing?.conversationId) {
-        navigate(`/client/messages/${existing.conversationId}`);
-        return;
       }
+    );
 
-      navigate(
-        `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
-      );
-    } catch (err) {
-      console.error("Find conversation failed:", err);
-      alert("Unable to open conversation with the expert.");
+    if (existing?.conversationId) {
+      navigate(`/client/messages/${existing.conversationId}`);
+      return;
     }
-  };
 
-  if (loading) {
-    return (
-      <ClientLayout>
-        <div className="flex flex-col items-center justify-center py-32 text-gray-400">
-          <span className="material-symbols-outlined mb-4 animate-spin text-5xl text-cyan-400">autorenew</span>
-          Loading profile...
-        </div>
-      </ClientLayout>
+    navigate(
+      `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(
+        expert.fullName
+      )}`
+    );
+  } catch (err) {
+    setConnectError(
+      err?.response?.data?.message ||
+        "Unable to open conversation with the expert."
     );
   }
+};
 
-  if (error || !expert) {
-    return (
-      <ClientLayout>
-        <div className="flex items-center justify-center px-6 py-32">
-          <button
-            onClick={() => navigate("/client/experts")}
-            className="rounded-lg bg-cyan-400 px-6 py-2.5 font-bold text-[#101319] transition hover:brightness-110"
-          >
-            Back to search
-          </button>
-        </div>
-      </ClientLayout>
-    );
-  }
+  if (loading || (!expert && !error)) {
+  return (
+    <ClientLayout>
+      <div className="flex flex-col items-center justify-center py-32 text-gray-400">
+        <span className="material-symbols-outlined mb-4 animate-spin text-5xl text-cyan-400">
+          autorenew
+        </span>
 
-  const rating = expert.profileScore ? expert.profileScore / 20 : 0;
+        Loading profile...
+      </div>
+    </ClientLayout>
+  );
+}
+
+if (error) {
+  return (
+    <ClientLayout>
+      <div className="flex flex-col items-center justify-center py-32 text-center">
+        <span className="material-symbols-outlined mb-3 text-5xl text-red-400">
+          error
+        </span>
+
+        <p className="text-sm text-red-300">
+          {error}
+        </p>
+      </div>
+    </ClientLayout>
+  );
+}
+
+  const rating = Math.max(
+    0,
+    Math.min(5, Number(expert.averageRating ?? 0))
+  );
+
+  const totalReviews = Math.max(
+    0,
+    Number(expert.totalReviews ?? 0)
+  );
+
+  const reviews = Array.isArray(expert.reviews) ? expert.reviews : [];
+
   const isVerified = expert.experienceVerificationStatus === "VERIFIED";
   const expertSkills = Array.isArray(expert.expertSkills) ? expert.expertSkills : [];
   const certificates = Array.isArray(expert.certificates) ? expert.certificates : [];
@@ -153,17 +195,31 @@ export default function ExpertProfileViewPage() {
     <ClientLayout>
       <div className="mx-auto max-w-[1000px] px-6 py-10">
 
-        <button onClick={() => navigate(-1)}
-          className="mb-6 flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-gray-200">
-          <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-          Back 
+        <button
+          onClick={() => navigate(-1)}
+          className="mb-6 flex items-center gap-1.5 text-sm text-gray-400 transition-colors hover:text-gray-200"
+        >
+          <span className="material-symbols-outlined text-[18px]">
+            arrow_back
+          </span>
+          Back
         </button>
+
+        {connectError && (
+          <div className="mb-5 flex items-center gap-2 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+            <span className="material-symbols-outlined text-[18px]">
+              error
+            </span>
+
+            {connectError}
+          </div>
+        )}
 
         {/* Header card */}
         <div className="relative mb-5 overflow-hidden rounded-2xl border border-white/[0.12] bg-[#1d2026]/80 p-7 backdrop-blur-md">
 
           <div className="flex flex-wrap items-start gap-5">
-            <img src={expert.avatarUrl || `https://i.pravatar.cc/120?u=${expert.expertProfileId}`} alt={expert.fullName}
+            <img src={expert.avatarUrl || "/default-avatar.png"} alt={expert.fullName}
               className="h-21 w-21 flex-shrink-0 rounded-full border-2 border-cyan-400/25 object-cover" style={{ width: 84, height: 84 }} />
 
             <div className="min-w-[200px] flex-1">
@@ -171,12 +227,20 @@ export default function ExpertProfileViewPage() {
               <p className="mb-2.5 font-mono text-[13px] uppercase tracking-wide text-cyan-400">{expert.professionalTitle}</p>
 
               <div className="flex flex-wrap items-center gap-4">
-                {rating > 0 && (
-                  <div className="flex items-center gap-2">
-                    <StarRating rating={rating} />
-                    <span className="font-mono text-[13px] text-gray-300">{expert.profileScore}/100</span>
-                  </div>
+                <div className="flex items-center gap-2">
+                <StarRating rating={rating} />
+
+                {totalReviews > 0 ? (
+                  <span className="font-mono text-[13px] text-gray-300">
+                    {rating.toFixed(1)}/5 ({totalReviews}{" "}
+                    {totalReviews === 1 ? "review" : "reviews"})
+                  </span>
+                ) : (
+                  <span className="font-mono text-[13px] text-gray-400">
+                    No reviews yet
+                  </span>
                 )}
+              </div>
 
                 {expert.availableForWork && (
                   <span className="flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/10 px-2.5 py-0.5 font-mono text-[11px] font-bold uppercase text-green-400">
@@ -242,33 +306,125 @@ export default function ExpertProfileViewPage() {
 
             {/* Experience verification */}
             <div className="rounded-2xl border border-white/[0.12] bg-[#1d2026]/80 p-7 backdrop-blur-md">
-              <span className="mb-2.5 block font-mono text-[10px] uppercase tracking-wider text-gray-400">Experience</span>
-              <div className={`mb-4 flex flex-wrap gap-7 ${expert.experienceVerificationNote ? "" : "mb-0"}`}>
+              <span className="mb-2.5 block font-mono text-[10px] uppercase tracking-wider text-gray-400">
+                Experience
+              </span>
+
+              <div
+                className={`flex flex-wrap gap-7 ${
+                  expert.experienceVerificationNote ? "mb-4" : ""
+                }`}
+              >
                 <div>
-                  <p className="mb-1 text-[11px] text-gray-400">Stated</p>
-                  <p className="font-mono text-xl font-bold text-gray-100">{expert.yearsOfExperience} yrs</p>
+                  <p className="mb-1 text-[11px] text-gray-400">
+                    Stated
+                  </p>
+
+                  <p className="font-mono text-xl font-bold text-gray-100">
+                    {expert.yearsOfExperience} yrs
+                  </p>
                 </div>
+
                 <div>
-                  <p className="mb-1 text-[11px] text-gray-400">Verified</p>
-                  <p className={`font-mono text-xl font-bold ${isVerified ? "text-green-400" : "text-yellow-400"}`}>{expert.verifiedYearsOfExperience} yrs</p>
+                  <p className="mb-1 text-[11px] text-gray-400">
+                    Verified
+                  </p>
+
+                  <p
+                    className={`font-mono text-xl font-bold ${
+                      isVerified
+                        ? "text-green-400"
+                        : "text-yellow-400"
+                    }`}
+                  >
+                    {expert.verifiedYearsOfExperience} yrs
+                  </p>
                 </div>
+
                 <div>
-                  <p className="mb-1 text-[11px] text-gray-400">Confidence</p>
-                  <p className="font-mono text-xl font-bold text-indigo-300">{expert.experienceConfidenceScore}%</p>
+                  <p className="mb-1 text-[11px] text-gray-400">
+                    Confidence
+                  </p>
+
+                  <p className="font-mono text-xl font-bold text-indigo-300">
+                    {expert.experienceConfidenceScore}%
+                  </p>
                 </div>
               </div>
 
+              {expert.experienceVerificationNote && (
+                <p className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-3 text-xs leading-5 text-gray-400">
+                  {expert.experienceVerificationNote}
+                </p>
+              )}
+            </div>
+
+            {/* Reviews */}
+            <div className="rounded-2xl border border-white/[0.12] bg-[#1d2026]/80 p-7 backdrop-blur-md">
+              <div className="mb-4 flex items-center justify-between">
+                <span className="block font-mono text-[10px] uppercase tracking-wider text-gray-400">
+                  Reviews
+                </span>
+
+                <span className="font-mono text-[11px] text-gray-400">
+                  {totalReviews}{" "}
+                  {totalReviews === 1 ? "review" : "reviews"}
+                </span>
+              </div>
+
+              {reviews.length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  {reviews.map((review) => (
+                    <div
+                      key={review.reviewId}
+                      className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-3"
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <StarRating
+                          rating={review.rating}
+                          sizeClass="text-[15px]"
+                        />
+
+                        <span className="font-mono text-[11px] text-gray-400">
+                          {Number(review.rating ?? 0).toFixed(1)}/5
+                        </span>
+                      </div>
+
+                      <p className="text-sm leading-6 text-gray-300">
+                        {review.comment || "No comment."}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">
+                  No reviews yet.
+                </p>
+              )}
             </div>
 
             {/* Certificates */}
             {certificates.length > 0 && (
               <div className="rounded-2xl border border-white/[0.12] bg-[#1d2026]/80 p-7 backdrop-blur-md">
-                <span className="mb-2.5 block font-mono text-[10px] uppercase tracking-wider text-gray-400">Certificates</span>
+                <span className="mb-2.5 block font-mono text-[10px] uppercase tracking-wider text-gray-400">
+                  Certificates
+                </span>
+
                 <div className="flex flex-col gap-2.5">
-                  {certificates.map((cert, i) => (
-                    <div key={cert.certificateId ?? i} className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-3">
-                      <p className="mb-0.5 text-[13px] font-semibold text-gray-100">{cert.certificateName || cert.name}</p>
-                      {cert.issuedBy && <p className="text-[11px] text-gray-400">{cert.issuedBy}</p>}
+                  {certificates.map((cert) => (
+                    <div
+                      key={cert.expertCertificateId}
+                      className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-3"
+                    >
+                      <p className="mb-0.5 text-[13px] font-semibold text-gray-100">
+                        {cert.certificateName || "Unnamed certificate"}
+                      </p>
+
+                      {cert.certificateIssuer && (
+                        <p className="text-[11px] text-gray-400">
+                          {cert.certificateIssuer}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -11,24 +11,6 @@ const toNumber = (value, fallback = 0) => {
   return Number.isNaN(number) ? fallback : number;
 };
 
-const toBoolean = (value, fallback = false) => {
-  if (value === undefined || value === null || value === "") return fallback;
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value === 1;
-
-  const normalized = String(value).trim().toLowerCase();
-
-  if (["true", "1", "yes", "verified", "confirmed", "active"].includes(normalized)) {
-    return true;
-  }
-
-  if (["false", "0", "no", "unverified", "pending"].includes(normalized)) {
-    return false;
-  }
-
-  return fallback;
-};
-
 const isInvalidId = (value) =>
   !value || value === "undefined" || value === "null";
 
@@ -58,34 +40,6 @@ const unwrapListData = (response) => {
   return [];
 };
 
-const getEmailVerified = (user) => {
-  const directValue = getValue(
-    user.isEmailVerified, user.IsEmailVerified,
-    user.emailVerified, user.EmailVerified,
-    user.emailConfirmed, user.EmailConfirmed,
-    user.isEmailConfirmed, user.IsEmailConfirmed, null
-  );
-
-  if (directValue !== null) return toBoolean(directValue, false);
-
-  const status = getValue(
-    user.emailVerificationStatus, user.EmailVerificationStatus,
-    user.verificationStatus, user.VerificationStatus, ""
-  );
-
-  if (status) {
-    return ["VERIFIED", "CONFIRMED", "APPROVED", "ACTIVE"].includes(
-      String(status).trim().toUpperCase()
-    );
-  }
-
-  return Boolean(getValue(
-    user.emailVerifiedAt, user.EmailVerifiedAt,
-    user.emailConfirmedAt, user.EmailConfirmedAt,
-    user.verifiedAt, user.VerifiedAt, null
-  ));
-};
-
 export const normalizeAdminUser = (user) => {
   if (!user) return null;
 
@@ -101,36 +55,30 @@ export const normalizeAdminUser = (user) => {
       user.fullName, user.FullName, user.name, user.Name,
       user.displayName, user.DisplayName, "Unknown User"
     ),
-    phoneNumber: getValue(user.phoneNumber, user.PhoneNumber, ""),
     avatarUrl: getValue(user.avatarUrl, user.AvatarUrl, ""),
     role,
     status,
     authProvider: getValue(
       user.authProvider, user.AuthProvider, user.provider, user.Provider, ""
     ),
-    isEmailVerified: getEmailVerified(user),
     banReason: getValue(user.banReason, user.BanReason, ""),
     bannedAt: getValue(user.bannedAt, user.BannedAt, null),
     lockReason: getValue(user.lockReason, user.LockReason, ""),
     lockoutCount: toNumber(getValue(user.lockoutCount, user.LockoutCount, 0)),
     lockoutEnd: getValue(user.lockoutEnd, user.LockoutEnd, null),
+    lockoutRemainingSeconds: toNumber(
+      getValue(
+        user.lockoutRemainingSeconds,
+        user.LockoutRemainingSeconds,
+        0
+      )
+    ),
     lastLockedAt: getValue(user.lastLockedAt, user.LastLockedAt, null),
     statusBeforeSuspension: getValue(
       user.statusBeforeSuspension, user.StatusBeforeSuspension, ""
     ),
-    expertProfileId: getValue(
-      user.expertProfileId, user.ExpertProfileId,
-      user.expertProfile?.expertProfileId,
-      user.ExpertProfile?.ExpertProfileId, null
-    ),
-    clientProfileId: getValue(
-      user.clientProfileId, user.ClientProfileId,
-      user.clientProfile?.clientProfileId,
-      user.ClientProfile?.ClientProfileId, null
-    ),
     createdAt: getValue(user.createdAt, user.CreatedAt, ""),
     updatedAt: getValue(user.updatedAt, user.UpdatedAt, ""),
-    lastLoginAt: getValue(user.lastLoginAt, user.LastLoginAt, null),
     raw: user,
   };
 };
@@ -167,8 +115,8 @@ const adminUserService = {
       .filter(Boolean)
       .sort((a, b) =>
         compareDateDesc(
-          a.updatedAt || a.lastLoginAt || a.createdAt,
-          b.updatedAt || b.lastLoginAt || b.createdAt
+          a.updatedAt || a.createdAt,
+          b.updatedAt || b.createdAt
         )
       );
   },

@@ -4,6 +4,8 @@ import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertWalletService from "../../../services/expertWallet.service";
 
 import { formatDateTime, parseUtcDate } from "../../../utils/dateTime.utils";
+
+// ===== Page constants & wallet presets =====
 const quickAmounts = [50000, 100000, 200000, 500000];
 const PAYMENT_CHECK_INTERVAL_MS = 5000;
 const DEFAULT_DEPOSIT_EXPIRE_SECONDS = 180;
@@ -26,6 +28,7 @@ const popularBanks = [
   "Other",
 ];
 
+// ===== Form defaults =====
 const emptyWithdrawalForm = {
   amount: "",
   bankName: "",
@@ -34,7 +37,9 @@ const emptyWithdrawalForm = {
   bankAccountHolder: "",
 };
 
+// ===== Expert wallet page: data loading, actions, and main layout =====
 export default function ExpertWalletPage() {
+  // ===== Routing context =====
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -49,12 +54,14 @@ export default function ExpertWalletPage() {
     returnReason === "BUY_PROPOSAL_CREDITS" ||
     returnTo === "/expert/proposal-credit-packages";
 
+  // ===== Wallet data state =====
   const [wallet, setWallet] = useState(null);
   const [balance, setBalance] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [depositOrders, setDepositOrders] = useState([]);
   const [withdrawals, setWithdrawals] = useState([]);
 
+  // ===== Deposit and withdrawal form state =====
   const [depositAmount, setDepositAmount] = useState("");
   const [activeDepositOrder, setActiveDepositOrder] = useState(null);
   const [showDepositModal, setShowDepositModal] = useState(false);
@@ -64,6 +71,7 @@ export default function ExpertWalletPage() {
   const [showWithdrawalModal, setShowWithdrawalModal] = useState(false);
   const [withdrawalForm, setWithdrawalForm] = useState(emptyWithdrawalForm);
 
+  // ===== Loading, feedback, and timers =====
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [creatingDeposit, setCreatingDeposit] = useState(false);
@@ -172,6 +180,7 @@ export default function ExpertWalletPage() {
   }, [transactions]);
 
 
+  // ===== Derived wallet totals shown in the dashboard cards =====
   const totalWithdrawn = useMemo(() => {
     const fromTransactions = normalizedTransactions
       .filter((item) => item.ui.group === "WITHDRAW_PAID")
@@ -195,27 +204,27 @@ export default function ExpertWalletPage() {
   }, [depositOrders, nowTick]);
 
   useEffect(() => {
-  if (!autoOpenDeposit) return;
+    if (!autoOpenDeposit) return;
 
-  setError("");
-  setMessage("");
+    setError("");
+    setMessage("");
 
-  if (activeDepositOrderForPayment) {
-    openDepositOrder(activeDepositOrderForPayment);
+    if (activeDepositOrderForPayment) {
+      openDepositOrder(activeDepositOrderForPayment);
 
-    setMessage(
-      "You already have an active deposit QR. Please complete it before creating a new one."
-    );
+      setMessage(
+        "You already have an active deposit QR. Please complete it before creating a new one."
+      );
 
-    return;
-  }
+      return;
+    }
 
-  setDepositAmount(String(requestedDepositAmount || ""));
-  setActiveDepositOrder(null);
-  setDepositCountdown(0);
-  setDepositMinimized(false);
-  setShowDepositModal(true);
-}, [autoOpenDeposit, requestedDepositAmount, activeDepositOrderForPayment]);
+    setDepositAmount(String(requestedDepositAmount || ""));
+    setActiveDepositOrder(null);
+    setDepositCountdown(0);
+    setDepositMinimized(false);
+    setShowDepositModal(true);
+  }, [autoOpenDeposit, requestedDepositAmount, activeDepositOrderForPayment]);
 
   const latestDepositOrders = useMemo(() => depositOrders, [depositOrders]);
 
@@ -249,6 +258,7 @@ export default function ExpertWalletPage() {
     });
   };
 
+  // ===== API loading: wallet balance, transactions, deposits, withdrawals =====
   const loadWallet = async () => {
     try {
       setLoading(true);
@@ -277,6 +287,7 @@ export default function ExpertWalletPage() {
     }
   };
 
+  // ===== Manual refresh keeps current page state intact =====
   const refreshWallet = async ({ keepMessage = false } = {}) => {
     try {
       setRefreshing(true);
@@ -339,6 +350,7 @@ export default function ExpertWalletPage() {
     setDepositMinimized(false);
   };
 
+  // ===== Deposit flow: creates QR payment order =====
   const handleCreateDepositOrder = async (event) => {
     event.preventDefault();
 
@@ -498,6 +510,7 @@ export default function ExpertWalletPage() {
     setWithdrawalForm(emptyWithdrawalForm);
   };
 
+  // ===== Withdrawal form helpers =====
   const updateWithdrawalField = (field, value) => {
     setError("");
 
@@ -525,6 +538,7 @@ export default function ExpertWalletPage() {
     return withdrawalForm.bankName.trim();
   };
 
+  // ===== Withdrawal flow: validates form and submits payout request =====
   const handleCreateWithdrawal = async (event) => {
     event.preventDefault();
 
@@ -582,6 +596,7 @@ export default function ExpertWalletPage() {
     navigate(target.path);
   };
 
+  // ===== Main render =====
   if (loading) {
     return (
       <ExpertLayout>
@@ -622,7 +637,8 @@ export default function ExpertWalletPage() {
                 </h1>
 
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
-                  Manage earnings, deposits, credits, and withdrawals.
+                  Track withdrawable money, pending milestone earnings, QR
+                  deposits, and proposal credits from one place.
                 </p>
               </div>
 
@@ -631,34 +647,34 @@ export default function ExpertWalletPage() {
                   type="button"
                   onClick={openWithdrawalModal}
                   disabled={withdrawableBalance <= 0}
-                  className="flex items-center gap-2 rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2.5 text-sm font-black text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-3 text-sm font-black text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-[22px]">
                     account_balance
                   </span>
-                  Withdraw
+                  Request Withdrawal
                 </button>
 
                 <button
                   type="button"
                   onClick={openDepositModal}
-                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-400 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_30px_rgba(0,240,255,0.18)] transition hover:brightness-110"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-400 px-4 py-3 text-sm font-black text-white shadow-[0_12px_30px_rgba(0,240,255,0.18)] transition hover:brightness-110"
                 >
                   <span className="material-symbols-outlined text-[22px]">
                     add_card
                   </span>
-                  Deposit
+                  Deposit Wallet
                 </button>
 
                 <button
                   type="button"
                   onClick={goToProposalCredits}
-                  className="flex items-center gap-2 rounded-xl border border-purple-400/40 bg-purple-400/10 px-4 py-2.5 text-sm font-black text-purple-300 transition hover:bg-purple-400 hover:text-black"
+                  className="flex items-center gap-2 rounded-xl border border-purple-400/40 bg-purple-400/10 px-4 py-3 text-sm font-black text-purple-300 transition hover:bg-purple-400 hover:text-black"
                 >
                   <span className="material-symbols-outlined text-[22px]">
                     workspace_premium
                   </span>
-                  Buy Credits
+                  Buy Proposal Credits
                 </button>
               </div>
             </div>
@@ -669,7 +685,7 @@ export default function ExpertWalletPage() {
 
           <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <BalanceCard
-              label="Available"
+              label="Available balance"
               value={formatMoney(balance?.availableBalance)}
               icon="account_balance_wallet"
               tone="cyan"
@@ -679,11 +695,11 @@ export default function ExpertWalletPage() {
             />
 
             <BalanceCard
-              label="Pending"
+              label="Pending earnings"
               value={formatMoney(balance?.pendingEarningsBalance)}
               icon="hourglass_top"
               tone="yellow"
-              description="Net milestone earnings waiting for project completion."
+              description="Net milestone earnings waiting for project completion before they become withdrawable."
             />
 
             <BalanceCard
@@ -695,7 +711,7 @@ export default function ExpertWalletPage() {
             />
 
             <BalanceCard
-              label="Withdrawn"
+              label="Withdrawn total"
               value={formatMoney(totalWithdrawn)}
               icon="account_balance"
               tone="green"
@@ -916,6 +932,7 @@ function SuccessToast({ message, onClose }) {
 }
 
 
+// ===== Withdrawal modal: bank payout form =====
 function WithdrawalModal({
   form,
   withdrawableBalance,
@@ -928,7 +945,7 @@ function WithdrawalModal({
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-4 backdrop-blur-sm">
-      <div className="wallet-scrollbar-hide max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-green-400/30 bg-[#0f141d] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
+      <div className="wallet-scrollbar-hide max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-green-400/30 bg-[#0f141d] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.16em] text-green-300">
@@ -940,7 +957,7 @@ function WithdrawalModal({
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-500">
-              Available to withdraw:{" "}
+              Available balance that can be withdrawn:{" "}
               <span className="font-black text-green-300">
                 {formatMoney(withdrawableBalance)}
               </span>
@@ -968,15 +985,15 @@ function WithdrawalModal({
           </p>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-5">
           <WalletInput
-            label="Amount"
+            label="Withdrawal Amount"
             type="number"
             min="1"
             value={form.amount}
             disabled={creating}
             onChange={(value) => onChange("amount", value)}
-            placeholder="Enter amount in VND"
+            placeholder="Enter the amount in VND"
           />
 
           <BankSelect
@@ -1014,7 +1031,7 @@ function WithdrawalModal({
           <button
             type="submit"
             disabled={creating}
-            className="w-full rounded-2xl bg-green-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-green-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="w-full rounded-2xl bg-green-400 px-5 py-4 text-sm font-black text-black transition hover:bg-green-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {creating ? "Submitting..." : "Submit Request"}
           </button>
@@ -1024,6 +1041,7 @@ function WithdrawalModal({
   );
 }
 
+// ===== Bank selector: large tap target dropdown =====
 function BankSelect({ value, disabled, onChange }) {
   const [open, setOpen] = useState(false);
 
@@ -1040,7 +1058,7 @@ function BankSelect({ value, disabled, onChange }) {
           type="button"
           disabled={disabled}
           onClick={() => setOpen((prev) => !prev)}
-          className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-left text-base font-bold text-white outline-none transition focus:border-green-400 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex min-h-[54px] w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-left text-base font-bold text-white outline-none transition focus:border-green-400 focus:ring-2 focus:ring-green-400/20 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className={value ? "text-white" : "text-gray-600"}>
             {selectedLabel}
@@ -1069,7 +1087,7 @@ function BankSelect({ value, disabled, onChange }) {
                   onChange(bank);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-bold transition ${
+                className={`flex w-full items-center justify-between rounded-xl px-4 py-3.5 text-left text-sm font-bold transition ${
                   active
                     ? "bg-green-400 text-black"
                     : "text-gray-200 hover:bg-white/[0.06] hover:text-white"
@@ -1091,6 +1109,7 @@ function BankSelect({ value, disabled, onChange }) {
   );
 }
 
+// ===== Wallet input: shared field style for payout information =====
 function WalletInput({
   label,
   value,
@@ -1113,7 +1132,7 @@ function WalletInput({
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-base font-bold text-white outline-none transition placeholder:text-gray-600 focus:border-green-400 disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-h-[54px] w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-base font-bold text-white outline-none transition placeholder:text-gray-600 focus:border-green-400 focus:ring-2 focus:ring-green-400/20 disabled:cursor-not-allowed disabled:opacity-60"
       />
     </label>
   );
@@ -1187,6 +1206,7 @@ function WithdrawalHistoryItem({ withdrawal }) {
   );
 }
 
+// ===== Deposit modal: QR payment creation and status check =====
 function DepositModal({
   amount,
   setAmount,
@@ -1208,12 +1228,13 @@ function DepositModal({
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-4 backdrop-blur-sm">
-      <div className="wallet-scrollbar-hide relative max-h-[92vh] w-full max-w-[420px] overflow-y-auto rounded-2xl border border-cyan-400/30 bg-[#0f141d] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
+      <div className="wallet-scrollbar-hide relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-cyan-400/30 bg-[#0f141d] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
         <div className="flex items-start justify-between gap-4 px-6 pt-6">
           <div>
             <h2 className="text-xl font-black text-white">Deposit with QR</h2>
             <p className="mt-1.5 text-xs leading-5 text-gray-500">
-              Complete the payment before the countdown reaches zero.
+              Create a PayOS QR deposit and complete it before the countdown
+              reaches zero.
             </p>
           </div>
 
@@ -1244,7 +1265,7 @@ function DepositModal({
                   value={amount}
                   onChange={(event) => setAmount(event.target.value)}
                   placeholder="Enter amount in VND"
-                  className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-base font-bold text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400"
+                  className="min-h-[54px] w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-4 text-base font-bold text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/20"
                 />
               </label>
 
@@ -1254,7 +1275,7 @@ function DepositModal({
                     key={item}
                     type="button"
                     onClick={() => setAmount(String(item))}
-                    className="rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2 text-xs font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-2 py-3 text-xs font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
                   >
                     {formatCompactMoney(item)}
                   </button>
@@ -1418,6 +1439,7 @@ function FloatingDepositButton({ order, remainingSeconds, onOpen }) {
   );
 }
 
+// ===== QR payment information shown after a deposit order is created =====
 function PaymentInformation({ order, onCopy }) {
   const bankName = order?.bankName || "";
   const accountName = order?.accountName || "";
@@ -1488,7 +1510,7 @@ function PaymentInfoRow({ label, value, copyable, onCopy, last = false }) {
         <button
           type="button"
           onClick={() => onCopy(value)}
-          className="shrink-0 rounded-xl bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+          className="shrink-0 rounded-xl bg-cyan-400/10 px-3.5 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
         >
           Copy
         </button>
@@ -1497,6 +1519,7 @@ function PaymentInfoRow({ label, value, copyable, onCopy, last = false }) {
   );
 }
 
+// ===== Dashboard balance card =====
 function BalanceCard({ label, value, icon, tone, description }) {
   const toneClass =
     tone === "cyan"

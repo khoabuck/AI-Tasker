@@ -8,6 +8,19 @@ const toNumber = (value, fallback = 0) => {
   return Number.isNaN(number) ? fallback : number;
 };
 
+const toBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+
+  const normalized = String(value).trim().toLowerCase();
+
+  if (["true", "1", "yes", "active"].includes(normalized)) return true;
+  if (["false", "0", "no", "inactive"].includes(normalized)) return false;
+
+  return fallback;
+};
+
 const unwrapListData = (response) => {
   const data = response?.data;
   if (Array.isArray(data)) return data;
@@ -45,7 +58,7 @@ export const normalizeAdminProposalCreditPackage = (item) => {
     ),
     price: toNumber(getValue(item.price, item.Price, 0)),
     currency: getValue(item.currency, item.Currency, "VND"),
-    isActive: Boolean(getValue(item.isActive, item.IsActive, true)),
+    isActive: toBoolean(getValue(item.isActive, item.IsActive), true),
     displayOrder: toNumber(getValue(item.displayOrder, item.DisplayOrder, 0)),
     createdAt: getValue(item.createdAt, item.CreatedAt, ""),
     updatedAt: getValue(item.updatedAt, item.UpdatedAt, ""),
@@ -55,15 +68,19 @@ export const normalizeAdminProposalCreditPackage = (item) => {
   };
 };
 
-const buildPayload = (form) => ({
-  packageName: form.packageName.trim(),
-  description: form.description.trim(),
-  proposalSubmitCredits: Number(form.proposalSubmitCredits),
-  price: Number(form.price),
-  currency: form.currency.trim().toUpperCase() || "VND",
-  isActive: Boolean(form.isActive),
-  displayOrder: Number(form.displayOrder || 0),
-  reason: form.reason?.trim() || "",
+const buildPayload = (form = {}) => ({
+  packageName: String(getValue(form.packageName, form.PackageName, "")).trim(),
+  description: String(getValue(form.description, form.Description, "")).trim(),
+  proposalSubmitCredits: toNumber(
+    getValue(form.proposalSubmitCredits, form.ProposalSubmitCredits, 0)
+  ),
+  price: toNumber(getValue(form.price, form.Price, 0)),
+  currency:
+    String(getValue(form.currency, form.Currency, "VND")).trim().toUpperCase() ||
+    "VND",
+  isActive: toBoolean(getValue(form.isActive, form.IsActive), true),
+  displayOrder: toNumber(getValue(form.displayOrder, form.DisplayOrder, 0)),
+  reason: String(getValue(form.reason, form.Reason, "")).trim(),
 });
 
 const adminProposalCreditPackageService = {

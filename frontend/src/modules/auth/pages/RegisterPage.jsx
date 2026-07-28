@@ -1,12 +1,22 @@
+// useState dùng để lưu dữ liệu có thể thay đổi trong component.
+// Khi state thay đổi, React sẽ render lại giao diện.
 import { useState } from "react";
+
+// Link: chuyển trang khi user click.
+// useNavigate: cho phép chuyển trang bằng code JavaScript.
 import { Link, useNavigate } from "react-router-dom";
-import { registerApi } from "../../../api/auth.api";
+
+// Hàm tiện ích dùng để lấy message lỗi từ response/API
+// và chuyển thành chuỗi dễ hiển thị cho user.
 import { getErrorMessage } from "../../../utils/auth.utils";
+
+// Các hàm API được tách riêng trong auth.api.js.
+// Component chỉ gọi API, không viết trực tiếp logic Axios tại đây.
+import { registerApi, loginWithGoogleApi,} from "../../../api/auth.api";
 
 const BG_IMAGE = "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
-const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_BACKEND_BASE_URL}/api/auth/google-login`;
-
+// một React component.
 const GoogleIcon = () => (
   <svg style={{ width: 20, height: 20 }} viewBox="0 0 24 24">
     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -16,46 +26,70 @@ const GoogleIcon = () => (
   </svg>
 );
 
+// Component chính của trang Register.
+//
+// Khi React Router cần hiển thị /register,
+// React sẽ render component này.
+// gọi là Functional Component.
+
 export default function RegisterPage() {
+  // Lấy hàm navigate từ React Router.
   const navigate = useNavigate();
+
+  // State lưu toàn bộ dữ liệu người dùng nhập trong form Register.
   const [form, setForm] = useState({ fullName: "", email: "", password: "", confirmPassword: "", terms: false });
+
+  // Lưu thông báo lỗi validation hoặc lỗi từ API.
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [focusField, setFocusField] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  //Hàm handleChange xử lý tất cả input trong form.
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+    const { name, value, type, checked } = e.target; // e là event , còn e.target chính là input vừa thay đổi.
+
+    // Giữ lại dữ liệu cũ bằng ...prev,
+    // sau đó cập nhật đúng field dựa vào thuộc tính name.
+    // Checkbox dùng checked (true/false),
+    // input bình thường dùng value.
     setForm((prev) => ({ ...prev, [name]: type === "checkbox" ? checked : value }));
     setError("");
   };
 
   const isFormValid = form.fullName.trim() && form.email.trim() && form.password.trim() && form.confirmPassword.trim() && form.terms;
 
+  // handleSubmit xử lý khi user bấm Create Account
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!isFormValid) return;
+    e.preventDefault(); //Chặn hành vi submit mặc định của trình duyệt.
+    if (!isFormValid) return; // Nếu thiếu dữ liệu bắt buộc thì dừng submit, không gọi API.
+
+    // kiểm tra confirmPassword có giống vs password ko
     if (form.password !== form.confirmPassword) {
       setError("Confirm password does not match.");
       return;
     }
+    // dến đây là validation FE đã pass và chuyển nút thành Creating account
     setLoading(true);
+    // xóa lỗi cũ tr khi gọi API
     setError("");
+    // bắt đầu gọi API register
+    // cấu trúc khi gọi API
     try {
-      await registerApi({ fullName: form.fullName, email: form.email, password: form.password });
-      navigate("/verify-email-notice", { state: { email: form.email } });
+      // có await thì đợi BE response thành công sau đó mới chuyển trang, nếu ko có await thì request ch xong là đã chuyene trang
+      await registerApi({ fullName: form.fullName, email: form.email, password: form.password }); // Gửi thông tin đăng ký sang Backend.
+      navigate("/verify-email-notice", { state: { email: form.email } }); // đăng ký thành công chuyển sang trang thông báo verify email.
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(getErrorMessage(err)); // Nếu API thất bại, lấy message lỗi phù hợp hiển thị lêm UI
     } finally {
-      setLoading(false);
+      setLoading(false); // dù success hay false thì cx phải tắt loading
     }
   };
 
-  // TODO (BE): Khi BE sửa GoogleCallback redirect về http://localhost:5173/oauth/callback?token=xxx
-  // thì tạo thêm trang /oauth/callback để bắt token và lưu vào localStorage
+// Bắt đầu luồng đăng nhập/đăng ký bằng Google OAuth.
   const handleGoogleLogin = () => {
-    window.location.href = GOOGLE_LOGIN_URL;
+    loginWithGoogleApi();
   };
 
   const inputStyle = (fieldName) => ({
@@ -76,6 +110,9 @@ export default function RegisterPage() {
     WebkitTextFillColor: "#e1e2eb",
   });
 
+  // Hàm trả về style của input.
+// fieldName dùng để kiểm tra input nào đang focus
+// và đổi màu border tương ứng.
   const iconStyle = (fieldName) => ({
     position: "absolute",
     left: 16,
@@ -90,7 +127,7 @@ export default function RegisterPage() {
     transition: "all .25s ease",
   });
 
-  return (
+  return ( // sau chữ return là UI của trang
     <div style={{ background: "#12151B", color: "#e1e2eb", minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "Inter, sans-serif" }}>
 
       {/* Navbar */}
@@ -144,7 +181,7 @@ export default function RegisterPage() {
                       type="text"
                       name="fullName"
                       value={form.fullName}
-                      onChange={handleChange}
+                      onChange={handleChange} // mỗi lần user gõ gọi lại handleChange
                       required
                       placeholder="Dr. Sarah Chen"
                       autoComplete="off"
@@ -152,12 +189,13 @@ export default function RegisterPage() {
                       autoCapitalize="off"
                       spellCheck={false}
                       style={inputStyle("fullName")}
-                      onFocus={() => setFocusField("fullName")}
+                      onFocus={() => setFocusField("fullName")} 
                       onBlur={() => setFocusField("")}
                     />
                   </div>
                 </div>
 
+                
                 {/* Email */}
                 <div>
                   <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Email Address</label>
@@ -168,7 +206,7 @@ export default function RegisterPage() {
                     <input
                       type="email"
                       name="email"
-                      value={form.email}
+                      value={form.email}      // Controlled input:giá trị input được lấy từ state,khi user nhập thì onChange cập nhật lại state.
                       onChange={handleChange}
                       required
                       placeholder="sarah.chen@neural.ai"
@@ -177,8 +215,8 @@ export default function RegisterPage() {
                       autoCapitalize="off"
                       spellCheck={false}
                       style={inputStyle("email")}
-                      onFocus={() => setFocusField("email")}
-                      onBlur={() => setFocusField("")}
+                      onFocus={() => setFocusField("email")} // User click vào input
+                      onBlur={() => setFocusField("")}       // User rời khỏi input
                     />
                   </div>
                 </div>
@@ -199,7 +237,7 @@ export default function RegisterPage() {
                         onChange={handleChange}
                         required
                         autoComplete="new-password"
-                        style={{ ...inputStyle("password"), paddingRight: 48 }}
+                        style={{ ...inputStyle("password"), paddingRight: 48 }} // Lấy toàn bộ: inputStyle("password") rồi override: paddingRight: 48
                         onFocus={() => setFocusField("password")}
                         onBlur={() => setFocusField("")}
                       />
@@ -309,6 +347,7 @@ export default function RegisterPage() {
                 </label>
               </div>
 
+              {/*Conditional Rendering. ==> Chỉ hiển thị box lỗi khi error có giá trị. */}             
               {/* Error */}
               {error && (
                 <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "12px 16px", color: "#f87171", fontSize: 14, marginBottom: 16 }}>
@@ -334,9 +373,9 @@ export default function RegisterPage() {
               </div>
 
               {/* Google */}
-              <button type="button" onClick={handleGoogleLogin}
-                style={{ width: "100%", background: "#232A35", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "14px", color: "#e1e2eb", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 24, transition: "background 0.2s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#32353b")}
+              <button type="button" onClick={handleGoogleLogin} disabled={loading}
+                style={{ width: "100%", background: "#232A35", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "14px", color: "#e1e2eb", fontSize: 15, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 24, transition: "background 0.2s, opacity 0.2s" }}
+                onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = "#32353b"; }}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#232A35")}>
                 <GoogleIcon />
                 <span>Continue with Google</span>
@@ -356,7 +395,7 @@ export default function RegisterPage() {
       <footer style={{ background: "#0b0e14", borderTop: "1px solid rgba(255,255,255,0.12)", padding: "48px 0" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 48px" }}>
           <p style={{ fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, color: "#e1e2eb", marginBottom: 4 }}>AI Tasker</p>
-          <p style={{ fontSize: 14, color: "#8c90a0" }}>© 2024 AI Tasker. All rights reserved.</p>
+          <p style={{ fontSize: 14, color: "#8c90a0" }}>© 2026 AI Tasker. All rights reserved.</p>
         </div>
       </footer>
     </div>
