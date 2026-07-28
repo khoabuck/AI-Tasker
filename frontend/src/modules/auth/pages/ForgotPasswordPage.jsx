@@ -14,12 +14,15 @@ export default function ForgotPasswordPage() {
   const [focusField, setFocusField] = useState("");
 
   const handleSubmit = async (e) => {
+    // USER BẤM "SEND RESET LINK"
     e.preventDefault();
     setLoading(true);
     setError("");
 
     try {
+      // gọi API
       await forgotPasswordApi({ email });
+      // gọi thành công API
       setSubmitted(true);
     } catch (err) {
       setError(getErrorMessage(err));

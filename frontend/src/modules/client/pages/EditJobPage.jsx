@@ -47,12 +47,18 @@ const buildPayload = (form) => ({
   budgetMax: Number(form.budgetMax),
   deadline: form.deadline
     ? new Date(form.deadline).toISOString()
-    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    : null,
   projectType: form.projectType,
   complexity: form.complexity || null,
   expectedDeliverables: form.expectedDeliverables || "",
-  isAiAssisted: !!form.aiGeneratedDescription,
-  skillIds: form.skills.filter((s) => s.id > 0).map((s) => s.id),
+  isAiAssisted: Boolean(form.isAiAssisted),
+  skillIds: form.skills
+    .map((s) => Number(s.id))
+    .filter(
+      (id) =>
+        Number.isInteger(id) &&
+        id > 0
+    ),
 });
 
 export default function EditJobPage() {
@@ -61,14 +67,12 @@ export default function EditJobPage() {
 
   const [form, setForm] = useState(null);
   const [originalStatus, setOriginalStatus] = useState("");
-  const [customSkill, setCustomSkill] = useState("");
   const [skillOptions, setSkillOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   // Danh sách skill GỐC của job lúc mới tải trang — đóng vai trò baseline để
@@ -78,10 +82,7 @@ export default function EditJobPage() {
   const [originalSkillNames, setOriginalSkillNames] = useState([]);
   const [irrelevantSkills, setIrrelevantSkills] = useState([]);
 
-  // Chỉ hiện cảnh báo khi job GỐC được tạo bằng AI Assistant (có
-  // aiGeneratedDescription) — đồng bộ với PostJobPage chỉ cảnh báo ở mode
-  // "ai", không cảnh báo ở job tạo thủ công hoàn toàn.
-  const wasAiAssisted = !!form?.aiGeneratedDescription;
+  const wasAiAssisted = Boolean(form?.isAiAssisted);
 
   // ── Fetch job data để prefill ──────────────────────────────────────
   useEffect(() => {
@@ -116,6 +117,7 @@ export default function EditJobPage() {
           expectedDeliverables:  job.expectedDeliverables  || "",
           deadline:              deadlineDate,
           skills:                mappedSkills,
+          isAiAssisted: Boolean(job.isAiAssisted),
         });
 
         setOriginalSkillNames(mappedSkills.map((s) => s.name.toLowerCase()));
@@ -155,9 +157,8 @@ export default function EditJobPage() {
       );
     })
     .catch((err) => {
-      if (err?.code !== "ERR_CANCELED") {
-        console.error("Load skills failed:", err);
-      }
+      if (err?.code === "ERR_CANCELED") return;
+      setSkillOptions([]);
     });
 
   return () => controller.abort();
@@ -166,7 +167,6 @@ export default function EditJobPage() {
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     setSaveError("");
-    setSaveSuccess(false);
   };
 
   const removeSkill = (skill) => {
@@ -205,33 +205,43 @@ export default function EditJobPage() {
     }
   };
 
-  const addCustomSkill = () => {
-    const s = customSkill.trim();
-    if (!s) return;
-    const exists = form.skills.find((sk) => sk.name.toLowerCase() === s.toLowerCase());
-    if (!exists) {
-      setForm((prev) => ({
-        ...prev,
-        skills: [...prev.skills, { id: -(Date.now()), name: s }],
-      }));
-
-      const isOriginal = originalSkillNames.includes(s.toLowerCase());
-      if (wasAiAssisted && !isOriginal) {
-        setIrrelevantSkills((prev) => (prev.includes(s) ? prev : [...prev, s]));
-      }
+  const validateForm = () => {
+    if (!form.title.trim()) {
+      return "Job title cannot be empty.";
     }
-    setCustomSkill("");
+
+    if (!form.description.trim()) {
+      return "Job description cannot be empty.";
+    }
+
+    const min = Number(form.budgetMin);
+    const max = Number(form.budgetMax);
+
+    if (!Number.isFinite(min) || min <= 0) {
+      return "Minimum budget must be greater than 0 VND.";
+    }
+
+    if (!Number.isFinite(max) || max <= 0) {
+      return "Maximum budget must be greater than 0 VND.";
+    }
+
+    if (min >= max) {
+      return "Minimum budget must be less than maximum budget.";
+    }
+
+    return "";
   };
 
   // ── PUT /api/jobs/{id} — lưu thay đổi, KHÔNG đổi status ────────────
   const handleSave = async () => {
-    if (!form.title.trim()) {
-      setSaveError("Job title cannot be empty.");
+    const validationError = validateForm();
+
+    if (validationError) {
+      setSaveError(validationError);
       return;
     }
     setSaving(true);
     setSaveError("");
-    setSaveSuccess(false);
     try {
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
       // Lưu xong quay về đúng tab của job trong JobsPage (không phải trang
@@ -246,20 +256,23 @@ export default function EditJobPage() {
   };
 
   const openSubmitConfirm = () => {
-    if (!form.title.trim()) {
-      setSaveError("Job title cannot be empty.");
+    const validationError = validateForm();
+
+    if (validationError) {
+      setSaveError(validationError);
       return;
     }
 
     setSaveError("");
-    setSaveSuccess(false);
     setShowSubmitConfirm(true);
   };
 
   // ── PUT /api/jobs/{id} rồi PUT /api/jobs/{id}/submit — lưu + đổi status OPEN ──
   const handleSubmit = async () => {
-    if (!form.title.trim()) {
-      setSaveError("Job title cannot be empty.");
+    const validationError = validateForm();
+
+    if (validationError) {
+      setSaveError(validationError);
       setShowSubmitConfirm(false);
       return;
     }
@@ -269,10 +282,20 @@ export default function EditJobPage() {
     setShowSubmitConfirm(false);
 
     try {
-      // Save changes first, then submit
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
-      await axiosInstance.put(`/jobs/${id}/submit`);
-      navigate("/client/jobs?status=OPEN");
+
+      const submitRes = await axiosInstance.put(`/jobs/${id}/submit`);
+
+      const newStatus = String(submitRes.data?.status ?? "")
+        .trim()
+        .toUpperCase();
+
+      if (!newStatus) {
+        setSaveError("Job submitted but no status was returned.");
+        return;
+      }
+
+      navigate(`/client/jobs?status=${newStatus}`);
     } catch (err) {
       setSaveError(err?.response?.data?.message || "Submit failed. Please try again.");
     } finally {
@@ -280,31 +303,57 @@ export default function EditJobPage() {
     }
 };
 
-  // ── Loading ────────────────────────────────────────────────────────
-  if (loading || !form) return (
-  <ClientLayout>
-    <div style={{ textAlign: "center", padding: "120px 0", color: "#8c90a0" }}>
-      <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#facc15" }}>autorenew</span>
-      Loading job data...
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </div>
-  </ClientLayout>
-);
+  if (loading) {
+    return (
+      <ClientLayout>
+        <div style={{ textAlign: "center", padding: "120px 0", color: "#8c90a0" }}>
+          <span
+            className="material-symbols-outlined"
+            style={{
+              fontSize: 48,
+              display: "block",
+              marginBottom: 16,
+              animation: "spin 1s linear infinite",
+              color: "#facc15",
+            }}
+          >
+            autorenew
+          </span>
+          Loading job data...
+        </div>
+      </ClientLayout>
+    );
+  }
 
-  // ── Fetch error ────────────────────────────────────────────────────
-  if (fetchError) return (
-    <ClientLayout>
-      <div style={{ textAlign: "center", padding: "120px 24px" }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-        <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{fetchError}</p>
-        <button onClick={() => navigate(-1)}
-          style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-          Back 
-        </button>
-      </div>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </ClientLayout>
-  );
+  if (fetchError) {
+    return (
+      <ClientLayout>
+        <div style={{ textAlign: "center", padding: "120px 24px" }}>
+          <span
+            className="material-symbols-outlined"
+            style={{
+              fontSize: 48,
+              color: "#f87171",
+              display: "block",
+              marginBottom: 12,
+            }}
+          >
+            error_outline
+          </span>
+
+          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>
+            {fetchError}
+          </p>
+
+          <button onClick={() => navigate(-1)}>
+            Back
+          </button>
+        </div>
+      </ClientLayout>
+    );
+  }
+
+  if (!form) return null;
 
   const isDraft = originalStatus === "DRAFT";
 
@@ -366,20 +415,22 @@ export default function EditJobPage() {
 
               {/* Budget */}
               <div>
-                <label style={labelStyle}>Budget Range(VND) <span style={{ color: "#f87171" }}>*</span></label>
+                <label style={labelStyle}>
+                  Budget Range (VND) <span style={{ color: "#f87171" }}>*</span>
+                </label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center" }}>
                   <div style={{ position: "relative" }}>
-                    <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>
+                    
                     <input type="number" name="budgetMin" value={form.budgetMin} onChange={handleChange}
-                      placeholder="Min" style={{ ...inputStyle, paddingLeft: 28 }}
+                      placeholder="Min" style={{ ...inputStyle, paddingLeft: 16 }}
                       onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                       onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                   </div>
                   <span style={{ color: "#414754", fontSize: 20, textAlign: "center" }}>—</span>
                   <div style={{ position: "relative" }}>
-                    <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>
+                    
                     <input type="number" name="budgetMax" value={form.budgetMax} onChange={handleChange}
-                      placeholder="Max" style={{ ...inputStyle, paddingLeft: 28 }}
+                      placeholder="Max" style={{ ...inputStyle, paddingLeft: 16 }}
                       onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                       onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                   </div>
@@ -451,7 +502,7 @@ export default function EditJobPage() {
                       onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                       onBlur={(e) => (e.target.style.borderColor = "rgba(0,240,255,0.25)")} />
                     <div style={{ position: "absolute", top: 10, right: 12, pointerEvents: "none" }}>
-                      <span style={{ fontSize: 9, fontFamily: "JetBrains Mono, monospace", color: "#00F0FF", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.1em" }}>Synthetix AI</span>
+                      <span style={{ fontSize: 9, fontFamily: "JetBrains Mono, monospace", color: "#00F0FF", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.1em" }}>AI Generated</span>
                     </div>
                   </div>
                 </div>
@@ -477,7 +528,10 @@ export default function EditJobPage() {
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
               {skillOptions.map((skill) => {
-                const selected = !!form.skills.find((s) => s.id === skill.id);
+                const selected = form.skills.some(
+                  (s) =>
+                    Number(s.id) === Number(skill.id)
+                );
                 const isIrrelevant = wasAiAssisted && irrelevantSkills.some(
                   (name) => name.toLowerCase() === skill.name.toLowerCase()
                 );
@@ -514,48 +568,6 @@ export default function EditJobPage() {
               })}
             </div>
 
-            {/* Custom skill */}
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <input
-                value={customSkill}
-                onChange={(e) => setCustomSkill(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomSkill(); } }}
-                placeholder="Type a custom skill and press Enter..."
-                style={{ ...inputStyle, flex: 1, fontSize: 13, padding: "8px 14px" }}
-                onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-              <button type="button" onClick={addCustomSkill}
-                style={{ padding: "8px 16px", background: "#232A35", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#e1e2eb", cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#32353b")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "#232A35")}>
-                Add
-              </button>
-            </div>
-
-            {/* Custom skills đã thêm (id âm) */}
-            {form.skills.filter((s) => s.id < 0).length > 0 && (
-              <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {form.skills.filter((s) => s.id < 0).map((s) => {
-                const isIrrelevant = wasAiAssisted && irrelevantSkills.some(
-                  (name) => name.toLowerCase() === s.name.toLowerCase()
-                );
-                return (
-                  <span key={s.id} style={{
-                    display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, fontSize: 11, fontFamily: "JetBrains Mono, monospace",
-                    background: isIrrelevant ? "rgba(245,158,11,0.1)" : "rgba(0,240,255,0.08)",
-                    border: isIrrelevant ? "1px solid rgba(245,158,11,0.4)" : "1px solid rgba(0,240,255,0.25)",
-                    color: isIrrelevant ? "#fbbf24" : "#00F0FF",
-                  }}>
-                    {isIrrelevant && <span className="material-symbols-outlined" style={{ fontSize: 13 }}>warning</span>}
-                    {s.name}
-                    <button type="button" onClick={() => removeSkill(s)}
-                      style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
-                  </span>
-                );
-              })}
-              </div>
-            )}
-
             {/* Cảnh báo skill nằm ngoài baseline gốc — chỉ hiện khi job vốn
                 được tạo bằng AI Assistant, giống hệt PostJobPage. */}
             {wasAiAssisted && irrelevantSkills.length > 0 && (
@@ -587,14 +599,6 @@ export default function EditJobPage() {
               </p>
             )}
           </div>
-
-          {/* Save success */}
-          {saveSuccess && (
-            <div style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.25)", borderRadius: 10, padding: "12px 16px", color: "#4ade80", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check_circle</span>
-              Lưu thành công! Job đã được cập nhật.
-            </div>
-          )}
 
           {/* Error */}
           {saveError && (

@@ -1,34 +1,113 @@
 // src/modules/client/pages/ClientProjectDetailPage.jsx
 //
-// GET  /api/projects/{projectId}                → thông tin project
-// GET  /api/projects/{projectId}/milestones      → danh sách milestone
-// POST /api/disputes                             → mở dispute mới
-//      { projectId, milestoneId, respondentUserId, disputedAmount, reason, evidenceText, evidenceFileUrl }
+// GET  /api/projects/{projectId}
+//      → thông tin project
 //
-// Nút "Open Dispute" xuất hiện ở 2 nơi theo đúng ngữ cảnh:
-//  - Cạnh từng milestone, khi project đang ACTIVE — milestoneId gắn trực tiếp vào milestone đó.
-//  - Ở cấp toàn project, chỉ khi project đã COMPLETED — milestoneId để null (tranh chấp sau
-//    khi đã nhận toàn bộ sản phẩm, không gắn riêng 1 milestone).
+// GET  /api/projects/{projectId}/milestones
+//      → danh sách milestone
+//
+// POST /api/disputes
+//      → mở dispute mới
+//
+// POST /api/projects/{projectId}/continue-after-dispute
+//      → Client chọn tiếp tục Project sau khi Expert thắng dispute
+//
+// POST /api/projects/{projectId}/end-after-dispute
+//      → Client chọn kết thúc Contract sau khi Expert thắng dispute
+//
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
-import { clientContractApi } from "../../../api/clientContract.api";
 import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const STATUS_CONFIG = {
-  ACTIVE:    { label: "Active",    color: "#facc15", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
-  COMPLETED: { label: "Completed", color: "#22c55e", bg: "rgba(34,197,94,0.08)",  border: "rgba(34,197,94,0.25)"  },
-  DISPUTED:  { label: "Disputed",  color: "#f97316", bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.25)" },
+  ACTIVE: {
+    label: "Active",
+    color: "#facc15",
+    bg: "rgba(250,204,21,0.08)",
+    border: "rgba(250,204,21,0.25)"
+  },
+
+  COMPLETED: {
+    label: "Completed",
+    color: "#22c55e",
+    bg: "rgba(34,197,94,0.08)",
+    border: "rgba(34,197,94,0.25)"
+  },
+
+  DISPUTED: {
+    label: "Disputed",
+    color: "#f97316",
+    bg: "rgba(249,115,22,0.08)",
+    border: "rgba(249,115,22,0.25)"
+  },
+
+  CANCELLED: {
+    label: "Cancelled",
+    color: "#f87171",
+    bg: "rgba(248,113,113,0.08)",
+    border: "rgba(248,113,113,0.25)"
+  },
 };
 
 const MILESTONE_STATUS = {
-  PENDING:   { label: "Pending",   color: "#8c90a0" },
-  SUBMITTED: { label: "Submitted", color: "#facc15" },
-  APPROVED:  { label: "Approved",  color: "#22c55e" },
-  REJECTED:  { label: "Rejected",  color: "#f87171" },
+  PENDING: {
+    label: "Pending",
+    color: "#8c90a0"
+  },
+
+  FUNDED: {
+    label: "Funded",
+    color: "#00F0FF"
+  },
+
+  SUBMITTED: {
+    label: "Submitted",
+    color: "#facc15"
+  },
+
+  APPROVED: {
+    label: "Approved",
+    color: "#22c55e"
+  },
+
+  RESOLVED: {
+    label: "Resolved",
+    color: "#22c55e"
+  },
+
+  REJECTED: {
+    label: "Rejected",
+    color: "#f87171"
+  },
+
+  CANCELLED: {
+    label: "Cancelled",
+    color: "#f87171"
+  },
+
+  CANCELED: {
+    label: "Cancelled",
+    color: "#f87171"
+  },
+
+  REFUNDED: {
+    label: "Refunded",
+    color: "#f87171"
+  },
 };
+
+const PROJECT_POLL_INTERVAL_MS = 15000;
 
 const cardStyle = {
   background: "rgba(16,19,25,0.85)",
@@ -42,20 +121,20 @@ const cardStyle = {
 // ── Open Dispute Modal ──────────────────────────────────────────────
 function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
   const [reason, setReason] = useState("");
-  const [disputedAmount, setDisputedAmount] = useState(milestone?.amount ?? project?.totalAmount ?? "");
+  const disputedAmount =
+  milestone?.amount ?? project?.totalAmount ?? "";
   const [evidenceText, setEvidenceText] = useState("");
   const [evidenceFileUrl, setEvidenceFileUrl] = useState("");
-  const [evidenceImageUrl, setEvidenceImageUrl] = useState("");
+
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState("");
-  const [submitted, setSubmitted] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState("");
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+
 
   const respondentUserId =
     project?.expertUserId ??
@@ -103,36 +182,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
       }));
     };
 
-  // BE chỉ có /uploads/images — chỉ hỗ trợ ảnh làm bằng chứng (screenshot, ảnh chụp
-  // sản phẩm lỗi...). Không có endpoint upload PDF/file thường, nên ô input giới
-  // hạn accept="image/*" để tránh người dùng chọn file sẽ luôn lỗi khi gửi lên.
-  const handleUploadImage = async (file) => {
-    if (!file) return;
-    setUploading(true);
-    setUploadError("");
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await axiosInstance.post("/uploads/images", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const raw = res.data?.data ?? res.data;
-
-      const url =
-        raw?.url ??
-        raw?.fileUrl ??
-        raw?.imageUrl ??
-        raw?.path ??
-        raw?.data?.url ??
-        "";
-
-      setEvidenceFileUrl(String(url || ""));
-    } catch (err) {
-      setUploadError(err?.response?.data?.message || "Image upload failed. Please try again.");
-    } finally {
-      setUploading(false);
-    }
-  };
+ 
 
   const handleSubmit = async () => {
     const errors = {};
@@ -221,26 +271,15 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
         evidenceFileUrl || ""
       );
 
-      formData.append(
-        "EvidenceImageUrl",
-        evidenceImageUrl || ""
-      );
-
       imageFiles.forEach((file) => {
         formData.append("Images", file);
       });
 
       await axiosInstance.post(
         "/disputes",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
+        formData
       );
 
-      setSubmitted(true);
       onSubmitted();
 
       setTimeout(() => {
@@ -319,7 +358,8 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
 
           <div>
             <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
-              Evidence (further description)
+              Evidence (further description){" "}
+              <span style={{ color: "#f87171" }}>*</span>
             </label>
             <textarea
               value={evidenceText}
@@ -387,9 +427,6 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
               Paste the Google Drive, Dropbox, OneDrive link
             </p>
 
-            {uploadError && (
-              <p style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{uploadError}</p>
-            )}
             <p style={{ fontSize: 11, color: "#5b6470", marginTop: 6, marginBottom: 0 }}>
               Only images are supported. To attach other documents (PDF, video, etc.), paste the link into the "Proof" box above.
             </p>
@@ -612,20 +649,17 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
             <button
               type="button"
               onClick={handleSubmit}
-              disabled={submitting || uploading}
+              disabled={submitting}
               style={{
                 flex: 2,
                 padding: "12px",
-                background:
-                  submitting || uploading ? "#1d2026" : "#f97316",
-                color:
-                  submitting || uploading ? "#8c90a0" : "#1a0a00",
+                background: submitting ? "#1d2026" : "#f97316",
+                color: submitting ? "#8c90a0" : "#1a0a00",
                 border: "none",
                 borderRadius: 8,
                 fontSize: 14,
                 fontWeight: 700,
-                cursor:
-                  submitting || uploading ? "not-allowed" : "pointer",
+                cursor: submitting ? "not-allowed" : "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -750,42 +784,97 @@ export default function ClientProjectDetailPage() {
   project?.latestProposalId;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [milestoneError, setMilestoneError] = useState("");
   const [disputeModal, setDisputeModal] = useState(null); // { milestone } | { milestone: null } khi mở cho cả project
   // bannerMsg dùng chung cho mọi thông báo thành công cần hiện khi quay lại trang
   // này — ví dụ sau khi vừa approve 1 deliverable ở MilestoneDeliverablesPage và
   // navigate về đây kèm state.successMsg, hoặc sau khi vừa mở dispute thành công.
   const [bannerMsg, setBannerMsg] = useState(location.state?.successMsg || "");
+  const [postDisputeActionLoading, setPostDisputeActionLoading] = useState("");
+  const [postDisputeActionError, setPostDisputeActionError] = useState("");
 
   const fetchData = useCallback(async (signal, silent = false) => {
     if (!silent) {
       setLoading(true);
       setError("");
+      setMilestoneError("");
     }
 
     try {
-      const res = await axiosInstance.get(`/projects/${projectId}`, { signal });
-      const projectData = res.data?.data ?? res.data;
+      // 1. Load project
+      const res = await axiosInstance.get(
+        `/projects/${projectId}`,
+        { signal }
+      );
+
+      const projectData =
+        res.data?.data ?? res.data;
+
+      const latestProjectStatus = String(
+        projectData?.status ?? ""
+      )
+        .trim()
+        .toUpperCase();
+
+      // Client thắng dispute → project CANCELLED
+      if (
+        silent &&
+        ["CANCELLED", "CANCELED"].includes(latestProjectStatus)
+      ) {
+        navigate(
+          "/client/projects?status=CANCELLED",
+          { replace: true }
+        );
+
+        return;
+      }
+
       setProject(projectData);
 
+      // 2. Load milestones
       try {
-        const msRes = await axiosInstance.get(`/projects/${projectId}/milestones`, { signal });
-        const msRaw = msRes.data?.data ?? msRes.data;
-        setMilestones(Array.isArray(msRaw) ? msRaw : msRaw?.items ?? []);
-      } catch {
-        setMilestones([]);
+        const msRes = await axiosInstance.get(
+          `/projects/${projectId}/milestones`,
+          { signal }
+        );
+
+        const msRaw =
+          msRes.data?.data ?? msRes.data;
+
+        setMilestones(
+          Array.isArray(msRaw)
+            ? msRaw
+            : msRaw?.items ?? []
+        );
+
+        if (!silent) {
+          setMilestoneError("");
+        }
+      } catch (err) {
+        if (err?.code === "ERR_CANCELED") return;
+
+        if (!silent) {
+          setMilestoneError(
+            err?.response?.data?.message ||
+              "Unable to load project milestones."
+          );
+        }
       }
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
 
       if (!silent) {
-        setError(err?.response?.data?.message || "Unable to load project information.");
+        setError(
+          err?.response?.data?.message ||
+            "Unable to load project information."
+        );
       }
     } finally {
       if (!silent) {
         setLoading(false);
       }
     }
-  }, [projectId]);
+  }, [projectId, navigate]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -794,23 +883,46 @@ export default function ClientProjectDetailPage() {
   }, [fetchData]);
 
   useEffect(() => {
+    const currentStatus = String(project?.status ?? "").toUpperCase();
+
+    const shouldPoll =
+      ["ACTIVE", "DISPUTED"].includes(currentStatus) ||
+      Boolean(project?.requiresPostDisputeDecision);
+
+    if (!shouldPoll) {
+      return;
+    }
+
     const intervalId = setInterval(() => {
-      fetchData(undefined, true); // silent = true, không hiện loading spinner
-    }, 3000);
+      fetchData(undefined, true);
+    }, PROJECT_POLL_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [fetchData]);
+  }, [
+    fetchData,
+    project?.status,
+    project?.requiresPostDisputeDecision,
+  ]);
 
   useEffect(() => {
-    if (
-      project?.status === "COMPLETED" &&
-      location.state?.successMsg !== "Review submitted successfully."
-    ) {
-      navigate(`/client/projects/${projectId}/review`, {
-        replace: true,
-      });
-    }
-  }, [project?.status, projectId, navigate, location.state]);
+  const currentStatus = String(project?.status ?? "").toUpperCase();
+
+  if (
+    currentStatus === "COMPLETED" &&
+    !project?.requiresPostDisputeDecision &&
+    location.state?.successMsg !== "Review submitted successfully."
+  ) {
+    navigate(`/client/projects/${projectId}/review`, {
+      replace: true,
+    });
+  }
+}, [
+  project?.status,
+  project?.requiresPostDisputeDecision,
+  projectId,
+  navigate,
+  location.state,
+]);
 
   const showFullLoading = loading && !project;
 
@@ -843,15 +955,121 @@ export default function ClientProjectDetailPage() {
 
 if (!project) return null;
 
-  const statusCfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ACTIVE;
+  const normalizedProjectStatus = String(project.status ?? "").toUpperCase();
+
+  const statusCfg =
+    STATUS_CONFIG[normalizedProjectStatus] || {
+      label: normalizedProjectStatus || "Unknown",
+      color: "#9ca3af",
+      bg: "rgba(156,163,175,0.08)",
+      border: "rgba(156,163,175,0.25)",
+    };
+
+  const requiresPostDisputeDecision =
+    normalizedProjectStatus === "DISPUTED" &&
+    project?.requiresPostDisputeDecision === true &&
+    Boolean(projectId);
+
   const expertName = project.expertName || project.expert?.fullName || "Expert";
   const startDate = project.startDate || project.createdAt
     ? new Date(project.startDate || project.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "—";
 
-  // Milestone "đang làm" = milestone đầu tiên chưa APPROVED.
-  const currentMilestoneIndex = milestones.findIndex((m) => m.status !== "APPROVED");
-  const currentMilestone = currentMilestoneIndex >= 0 ? milestones[currentMilestoneIndex] : null;
+  // Milestone được xem là đã chốt.
+// APPROVED: Client approve bình thường.
+// RESOLVED: dispute đã được Admin xử lý xong.
+const isMilestoneFinished = (milestone) => {
+  const status = String(
+    milestone?.status ?? ""
+  )
+    .trim()
+    .toUpperCase();
+
+  return [
+    "APPROVED",
+    "RESOLVED",
+    "REFUNDED",
+    "CANCELLED",
+    "CANCELED",
+  ].includes(status);
+};
+
+// Milestone hiện tại = milestone đầu tiên chưa được chốt.
+const currentMilestoneIndex = milestones.findIndex(
+  (m) => !isMilestoneFinished(m)
+);
+
+const currentMilestone =
+  currentMilestoneIndex >= 0
+    ? milestones[currentMilestoneIndex]
+    : null;
+
+// Còn ít nhất một milestone chưa chốt
+// → Project vẫn còn công việc để Continue.
+const hasRemainingMilestone = milestones.some(
+  (m) => !isMilestoneFinished(m)
+);
+
+  const handleContinueAfterDispute = async () => {
+    if (!projectId || postDisputeActionLoading) {
+      return;
+    }
+
+    setPostDisputeActionLoading("continue");
+    setPostDisputeActionError("");
+
+    try {
+      await axiosInstance.post(
+        `/projects/${projectId}/continue-after-dispute`
+      );
+
+      setBannerMsg("Project continued successfully.");
+      await fetchData(undefined, true);
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.title ||
+        "Continue project failed.";
+
+      await fetchData(undefined, true);
+
+      setPostDisputeActionError(message);
+    } finally {
+      setPostDisputeActionLoading("");
+    }
+  };
+
+  const handleEndAfterDispute = async () => {
+    if (!projectId || postDisputeActionLoading) {
+      return;
+    }
+
+    setPostDisputeActionLoading("end");
+    setPostDisputeActionError("");
+
+    try {
+      await axiosInstance.post(
+        `/projects/${projectId}/end-after-dispute`
+      );
+
+      navigate("/client/projects?status=CANCELLED", {
+        state: {
+          successMsg: "Contract ended successfully.",
+        },
+      });
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.title ||
+        "End contract failed.";
+
+      await fetchData(undefined, true);
+
+      setPostDisputeActionError(message);
+    } finally {
+      setPostDisputeActionLoading("");
+    }
+  };
 
   return (
     <ClientLayout>
@@ -878,14 +1096,40 @@ if (!project) return null;
 
           {/* Expert info */}
           <div style={{ paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            {project.expertAvatarUrl ? (
             <img
-                src={
-                  project.expertAvatarUrl ||
-                  `https://i.pravatar.cc/80?u=${project.expertProfileId || project.expertUserId || project.projectId}`
-                }
-                alt={expertName}
-                style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.25)" }}
-              />
+              src={project.expertAvatarUrl}
+              alt={expertName}
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "2px solid rgba(0,240,255,0.25)",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                background: "#272a30",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#8c90a0",
+                flexShrink: 0,
+              }}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: 26 }}
+              >
+                person
+              </span>
+            </div>
+          )}
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 15, fontWeight: 700, color: "#e1e2eb", margin: "0 0 2px", fontFamily: "Hanken Grotesk, sans-serif" }}>{expertName}</p>
               <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{project.expertTitle || "AI Expert"}</p>
@@ -939,7 +1183,8 @@ if (!project) return null;
               Contract Detail
             </button>
 
-            {project.status === "COMPLETED" && (
+            {normalizedProjectStatus === "COMPLETED" &&
+              !requiresPostDisputeDecision && (
               <button onClick={() => navigate(`/client/projects/${projectId}/review`)}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>star</span>
@@ -947,13 +1192,38 @@ if (!project) return null;
               </button>
             )}
 
-            {project.status === "DISPUTED" && (
-              <button onClick={() => navigate(`/client/disputes?projectId=${projectId}`)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>gavel</span>
-                View Dispute
-              </button>
-            )}
+            {(normalizedProjectStatus === "DISPUTED" ||
+            requiresPostDisputeDecision) && (
+            <button
+              onClick={() => navigate(`/client/disputes?projectId=${projectId}`)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "9px 16px",
+                background: requiresPostDisputeDecision
+                  ? "rgba(0,240,255,0.08)"
+                  : "rgba(249,115,22,0.08)",
+                color: requiresPostDisputeDecision
+                  ? "#00F0FF"
+                  : "#f97316",
+                border: requiresPostDisputeDecision
+                  ? "1px solid rgba(0,240,255,0.25)"
+                  : "1px solid rgba(249,115,22,0.25)",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                {requiresPostDisputeDecision ? "rule" : "gavel"}
+              </span>
+              {requiresPostDisputeDecision
+                ? "Resolve Decision"
+                : "View Dispute"}
+            </button>
+          )}
           </div>
         </div>
 
@@ -964,8 +1234,133 @@ if (!project) return null;
           </div>
         )}
 
+        {requiresPostDisputeDecision && (
+        <div
+          style={{
+            ...cardStyle,
+            marginBottom: 20,
+            border: "1px solid rgba(0,240,255,0.22)",
+            background: "rgba(0,240,255,0.03)",
+          }}
+        >
+          <h3
+            style={{
+              fontFamily: "Hanken Grotesk, sans-serif",
+              fontSize: 16,
+              fontWeight: 700,
+              color: "#00F0FF",
+              marginBottom: 10,
+            }}
+          >
+            Project Decision Required
+          </h3>
+
+          <p
+            style={{
+              fontSize: 13,
+              color: "#c2c6d6",
+              lineHeight: 1.7,
+              margin: "0 0 16px",
+            }}
+          >
+            {hasRemainingMilestone
+              ? "The latest dispute was resolved in favor of the Expert. Please choose whether you want to continue the project or end the contract."
+              : "The latest dispute was resolved in favor of the Expert. There are no remaining milestones to continue."}
+          </p>
+
+          {postDisputeActionError && (
+            <div
+              style={{
+                background: "rgba(239,68,68,0.08)",
+                border: "1px solid rgba(239,68,68,0.25)",
+                borderRadius: 8,
+                padding: "10px 14px",
+                color: "#f87171",
+                fontSize: 13,
+                marginBottom: 12,
+              }}
+            >
+              {postDisputeActionError}
+            </div>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            {hasRemainingMilestone && (
+            <button
+              type="button"
+              onClick={handleContinueAfterDispute}
+              disabled={Boolean(postDisputeActionLoading)}
+              style={{
+                padding: "10px 18px",
+                background: "#00F0FF",
+                color: "#002022",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: postDisputeActionLoading
+                  ? "not-allowed"
+                  : "pointer",
+              }}
+            >
+              {postDisputeActionLoading === "continue"
+                ? "Continuing..."
+                : "Continue Project"}
+            </button>
+          )}
+
+            <button
+              type="button"
+              onClick={handleEndAfterDispute}
+              disabled={Boolean(postDisputeActionLoading)}
+              style={{
+                padding: "10px 18px",
+                background: "rgba(239,68,68,0.12)",
+                color: "#f87171",
+                border: "1px solid rgba(239,68,68,0.35)",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: postDisputeActionLoading
+                  ? "not-allowed"
+                  : "pointer",
+              }}
+            >
+              {postDisputeActionLoading === "end"
+                ? "Ending..."
+                : "End Contract"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() =>
+                navigate(`/client/disputes?projectId=${projectId}`)
+              }
+              style={{
+                padding: "10px 18px",
+                background: "rgba(249,115,22,0.08)",
+                color: "#f97316",
+                border: "1px solid rgba(249,115,22,0.25)",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              View Dispute
+            </button>
+          </div>
+        </div>
+      )}
+
         {/* Banner milestone hiện tại — chỉ có ý nghĩa khi project còn ACTIVE */}
-        {project.status === "ACTIVE" && currentMilestone && (
+        {normalizedProjectStatus === "ACTIVE" && currentMilestone && (
           <div style={{ ...cardStyle, marginBottom: 20, border: "1px solid rgba(250,204,21,0.25)", background: "rgba(250,204,21,0.03)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -987,7 +1382,7 @@ if (!project) return null;
             {milestones.length > 0 && (
               <div style={{ marginTop: 16, display: "flex", gap: 4 }}>
                 {milestones.map((m, i) => {
-                  const done = m.status === "APPROVED";
+                  const done = isMilestoneFinished(m);
                   const active = i === currentMilestoneIndex;
                   return (
                     <div key={m.milestoneId ?? i} style={{ flex: 1, height: 6, borderRadius: 3, background: done ? "#22c55e" : active ? "#facc15" : "rgba(255,255,255,0.08)" }} />
@@ -1004,21 +1399,77 @@ if (!project) return null;
             Milestones
           </h3>
 
-          {milestones.length === 0 ? (
+          {milestoneError ? (
+          <div
+            style={{
+              background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.25)",
+              borderRadius: 8,
+              padding: "12px 14px",
+              color: "#f87171",
+              fontSize: 13,
+            }}
+          >
+            {milestoneError}
+          </div>
+        ) : milestones.length === 0 ? (
             <p style={{ fontSize: 14, color: "#8c90a0", textAlign: "center", padding: "24px 0" }}>No milestones have been created yet.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {milestones.map((m, index) => {
-                const normalizedStatus = String(m.status || "").toUpperCase();
-                const mCfg = MILESTONE_STATUS[normalizedStatus] || MILESTONE_STATUS.PENDING;
-                const isCurrent = index === currentMilestoneIndex;
+                const normalizedStatus = String(
+                  m.status ?? ""
+                )
+                  .trim()
+                  .toUpperCase();
 
-                const canOpenDeliverable = ["SUBMITTED", "APPROVED", "REJECTED"].includes(
-                  normalizedStatus
-                );
+                const normalizedPaymentStatus = String(
+                  m.paymentStatus ??
+                  m.escrowStatus ??
+                  ""
+                )
+                  .trim()
+                  .toUpperCase();
+
+                const mCfg =
+                MILESTONE_STATUS[normalizedStatus] || {
+                  label: normalizedStatus || "Unknown",
+                  color: "#9ca3af",
+                };
+
+                const isCurrent =
+                  index === currentMilestoneIndex;
+
+                // Milestone Client đã approve bình thường.
+                const isApproved =
+                  normalizedStatus === "APPROVED";
+
+                // Milestone vẫn đang trong flow review bình thường.
+                const canPreviewDeliverable =
+                  normalizedProjectStatus === "ACTIVE" &&
+                  ["SUBMITTED", "REJECTED"].includes(
+                    normalizedStatus
+                  );
+
+                // Dispute đã resolve và Expert thắng:
+                // milestone RESOLVED + tiền đã RELEASED cho Expert.
+                const isExpertWinResolved =
+                  normalizedStatus === "RESOLVED" &&
+                  normalizedPaymentStatus === "RELEASED";
+
+                // Chỉ cho xem:
+                // 1. milestone APPROVED;
+                // 2. milestone đang review khi project ACTIVE;
+                // 3. milestone dispute mà Expert thắng.
+                const canOpenDeliverable =
+                  isApproved ||
+                  canPreviewDeliverable ||
+                  isExpertWinResolved;
 
                 const deliverableButtonLabel =
-                  normalizedStatus === "SUBMITTED" ? "Preview" : "View";
+                  normalizedStatus === "SUBMITTED"
+                    ? "Preview"
+                    : "View";
 
                 return (
                   <div key={m.milestoneId ?? index}
@@ -1037,7 +1488,7 @@ if (!project) return null;
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       {m.amount != null && (
                         <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: "#00F0FF", fontWeight: 700 }}>
-                          ${m.amount.toLocaleString()}
+                          {formatCurrency(m.amount)}
                         </span>
                       )}
                       <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: mCfg.color, background: mCfg.color + "15", border: `1px solid ${mCfg.color}40` }}>
@@ -1051,9 +1502,10 @@ if (!project) return null;
                         </button>
                       )}
 
-                      {/* Open Dispute gắn theo milestone — chỉ khi project còn ACTIVE.
-                          Khi đã COMPLETED, dispute chỉ mở ở cấp project (nút header phía trên). */}
-                      {project.status === "ACTIVE" &&
+                      {/* Open Dispute gắn theo milestone — chỉ khi project còn ACTIVE
+                       và milestone ở trạng thái SUBMITTED hoặc REJECTED. */}
+                      {normalizedProjectStatus === "ACTIVE" &&
+                        !requiresPostDisputeDecision &&
                         ["SUBMITTED", "REJECTED"].includes(normalizedStatus) && (
                           <button
                             onClick={() => setDisputeModal({ milestone: m })}

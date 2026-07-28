@@ -668,4 +668,3 @@ function firstSentence(text) {
       .filter(Boolean)[0] || ""
   );
 }
-

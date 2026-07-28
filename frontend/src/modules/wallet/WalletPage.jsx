@@ -1,4 +1,4 @@
-// src/modules/client/pages/WalletPage.jsx
+// src/modules/wallet/WalletPage.jsx
 //
 // GET  /api/wallets/balance                              → số dư hiện tại
 // GET  /api/transactions/me                               → lịch sử giao dịch
@@ -31,6 +31,21 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../components/layout/ClientLayout";
 import { walletService } from "../../services/wallet.service";
+
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
+const QUICK_DEPOSIT_AMOUNTS = [
+  25000,
+  50000,
+  100000,
+  500000,
+];
 
 const parseBackendTime = (value) => {
   if (!value) return null;
@@ -65,7 +80,6 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
-  const [qrOpenedAt, setQrOpenedAt] = useState(null);
 
   // Mở lại order cũ luôn vào step "qr" — không tự đoán hết hạn dựa vào giờ máy client,
   // chỉ dựa vào status thật trả về từ BE (EXPIRED/CANCELLED) qua polling bên dưới.
@@ -77,9 +91,10 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
 
     const checkStatus = async () => {
       try {
-        const latest = await walletService.getDepositOrderById(
+        const res = await walletService.getDepositOrderById(
           order.depositOrderId
         );
+        const latest = res;
 
         if (latest?.status === "PAID") {
           onSuccess();
@@ -107,41 +122,19 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
     return () => { stopped = true; clearInterval(pollInterval); };
   }, [step, order, onClose, onSuccess]);
 
-  // Countdown tới expiresAt — chỉ để HIỂN THỊ, không tự quyết định hết hạn.
-  // Việc hết hạn thật được xác nhận qua polling status ở trên (BE trả EXPIRED/CANCELLED).
   useEffect(() => {
     if (step !== "qr" || !order?.expiresAt) return;
 
     const updateCountdown = () => {
-      if (!order?.createdAt || !order?.expiresAt) {
-        setSecondsLeft(0);
-        return;
-      }
-
-      const createdTime = Date.parse(order.createdAt);
-      const expiresTime = Date.parse(order.expiresAt);
-
-      const totalSeconds = Math.max(
-        0,
-        Math.floor((expiresTime - createdTime) / 1000)
-      );
-
-      const openedAt = qrOpenedAt || Date.now();
-
-      const elapsedSeconds = Math.max(
-        0,
-        Math.floor((Date.now() - openedAt) / 1000)
-      );
-
-      const remain = Math.max(0, totalSeconds - elapsedSeconds);
-
-      setSecondsLeft(remain);
+      setSecondsLeft(getDepositRemainingSeconds(order));
     };
 
     updateCountdown();
+
     const timer = setInterval(updateCountdown, 1000);
+
     return () => clearInterval(timer);
-  }, [step, order, qrOpenedAt]);
+  }, [step, order]);
 
   const formatTime = (s) => {
     const m = Math.floor(s / 60);
@@ -153,16 +146,10 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
     if (!amount || Number(amount) <= 0) { setError("The amount must be greater than 0."); return; }
     setLoading(true); setError("");
     try {
-      const orderData = await walletService.createDepositOrder(amount);
-
-      if (!orderData?.depositOrderId) {
-        throw new Error(
-          "Deposit order response does not contain depositOrderId."
-        );
-      }
+      const res = await walletService.createDepositOrder(amount);
+      const orderData = res;
 
       setOrder(orderData);
-      setQrOpenedAt(Date.now());
       onOrderCreated?.(orderData);
       setStep("qr");
     } catch (err) {
@@ -209,8 +196,8 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
 
             {/* Quick amounts */}
             <div style={{ display: "flex", gap: 8 }}>
-              {[20000, 50000, 100000, 500000].map((a) => (
-                <button key={a} onClick={() => setAmount(String(a))}
+              {QUICK_DEPOSIT_AMOUNTS.map((a) => (
+                  <button key={a} onClick={() => setAmount(String(a))}
                   style={{ flex: 1, padding: "8px", background: amount == a ? "rgba(0,240,255,0.12)" : "rgba(255,255,255,0.04)", border: `1px solid ${amount == a ? "rgba(0,240,255,0.4)" : "rgba(255,255,255,0.1)"}`, borderRadius: 8, color: amount == a ? "#00F0FF" : "#8c90a0", fontSize: 12, cursor: "pointer", fontFamily: "JetBrains Mono, monospace" }}>
                   {a.toLocaleString()}₫
                 </button>
@@ -243,7 +230,7 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
             <div style={{ textAlign: "center" }}>
               <p style={{ fontSize: 13, color: "#8c90a0", margin: "0 0 4px" }}>Số tiền</p>
               <p style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 22, fontWeight: 700, color: "#00F0FF", margin: 0 }}>
-                {Number(order.amount).toLocaleString()}₫
+                {formatCurrency(order.amount)}
               </p>
             </div>
 
@@ -351,14 +338,12 @@ function WithdrawModal({ onClose, onSuccess }) {
     if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
     setLoading(true); setError("");
     try {
-      const created = await walletService.createWithdrawal(form);
+      const res = await walletService.createWithdrawal(form);
 
-      if (!created?.withdrawalRequestId) {
-        throw new Error(
-          "Withdrawal response does not contain withdrawalRequestId."
-        );
-      }
-
+      // Response thật: { success, message, data: { withdrawalRequestId, amount,
+      // feeAmount, netAmount, bankName, bankAccountNumber, bankAccountHolder,
+      // status: "PENDING", createdAt, ... } }
+      const created = res;
       onSuccess(created);
       onClose();
     } catch (err) {
@@ -626,7 +611,7 @@ const getTxAmountText = (tx) => {
 
   if (amount === 0) return "0₫";
 
-  return `${isExpenseTx(tx) ? "-" : "+"}${Math.abs(amount).toLocaleString()}₫`;
+  return `${isExpenseTx(tx) ? "-" : "+"}${formatCurrency(Math.abs(amount))}`;
 };
 
 function StatusBadge({ status }) {
@@ -732,7 +717,7 @@ export default function WalletPage() {
     // PENDING: vừa tạo yêu cầu, tiền bị giữ
     // PROCESSING: admin đã gửi payout qua PayOS, đang xử lý
     // PAID: đã rút thành công
-    return ["PENDING", "PROCESSING", "PAID"].includes(status);
+    return ["PENDING", "PROCESSING"].includes(status);
   })
   .reduce((sum, w) => {
     return sum + Number(w.amount ?? 0);
@@ -747,21 +732,21 @@ const metrics = balance
   ? [
       {
         label: "Balance",
-        value: `${Number(balance.availableBalance ?? 0).toLocaleString()}₫`,
+        value: formatCurrency(balance.availableBalance),
         icon: "account_balance_wallet",
         iconBg: "rgba(0,240,255,0.1)",
         iconColor: "#00F0FF",
       },
       {
         label: "Escrow",
-        value: `${escrowAmount.toLocaleString()}₫`,
+        value: formatCurrency(escrowAmount),
         icon: "lock",
         iconBg: "rgba(250,204,21,0.1)",
         iconColor: "#facc15",
       },
       {
         label: "Withdraw",
-        value: `${activeWithdrawalAmount.toLocaleString()}₫`,
+        value: formatCurrency(activeWithdrawalAmount),
         icon: "outbox",
         iconBg: "rgba(74,222,128,0.1)",
         iconColor: "#4ade80",
@@ -865,7 +850,7 @@ const metrics = balance
                   No transactions have been made yet.
                 </div>
               ) : (
-                <div className="wallet-scroll-area" style={{ maxHeight: 420 }}>
+                <div className="wallet-scroll-area">
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ background: "rgba(35,42,53,0.5)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
@@ -901,7 +886,7 @@ const metrics = balance
                               }}
                             >
                               {formatTxDescription(tx)}
-</td>
+                            </td>
                             <td style={{ padding: "14px 20px", fontSize: 13, color: "#8c90a0" }}>{date}</td>
                             <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: isExpenseTx(tx) ? "#ffb4ab" : "#00F0FF" }}>
                               {getTxAmountText(tx)}
@@ -927,9 +912,9 @@ const metrics = balance
                     No deposit orders yet.
                   </div>
                 ) : (
-                  <div className="wallet-scroll-area" style={{ maxHeight: 420 }}>
+                  <div className="wallet-scroll-area">
                     <div style={{ display: "flex", flexDirection: "column" }}>
-                      {depositOrders.map((order, i) => {
+                      {depositOrders.filter(Boolean).map((order, i) => {
                       const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString("vi-VN") : "—";
                       void tick;
 
@@ -968,7 +953,7 @@ const metrics = balance
                         >
                           <div>
                             <p style={{ fontSize: 13, color: "#e1e2eb", margin: "0 0 2px", fontWeight: 600 }}>
-                              {(order.amount ?? 0).toLocaleString()}₫
+                              {formatCurrency(order.amount)}
                             </p>
                             <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>
                               {order.provider ?? "PAYOS"} • {date}
@@ -1029,7 +1014,7 @@ const metrics = balance
                   No withdrawal requests yet.
                 </div>
               ) : (
-                <div className="wallet-scroll-area" style={{ maxHeight: 420 }}>
+                <div className="wallet-scroll-area">
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "rgba(35,42,53,0.5)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
@@ -1045,13 +1030,13 @@ const metrics = balance
                         <tr key={w.withdrawalRequestId ?? i}
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                           <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#e1e2eb" }}>
-                            {Number(w.amount ?? 0).toLocaleString()}₫
+                            {formatCurrency(w.amount)}
                           </td>
                           <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#8c90a0" }}>
-                            {Number(w.feeAmount ?? 0).toLocaleString()}₫
+                            {formatCurrency(w.feeAmount)}
                           </td>
                           <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#00F0FF" }}>
-                            {Number(w.netAmount ?? 0).toLocaleString()}₫
+                            {formatCurrency(w.netAmount)}
                           </td>
                           <td style={{ padding: "14px 20px", fontSize: 13, color: "#c2c6d6" }}>
                             {w.bankName ?? "—"} • {w.bankAccountNumber ?? "—"}
@@ -1082,14 +1067,17 @@ const metrics = balance
           }}
           onSuccess={() => showSuccess("Deposit successful!")}
           onOrderCreated={(createdOrder) => {
-            setDepositOrders((prev) => [
-              createdOrder,
-              ...prev.filter(
-                (o) => o.depositOrderId !== createdOrder.depositOrderId
-              ),
-            ]);
-            
-          }}
+          if (!createdOrder?.depositOrderId) return;
+
+          setDepositOrders((prev) => [
+            createdOrder,
+            ...prev.filter(
+              (o) =>
+                o &&
+                o.depositOrderId !== createdOrder.depositOrderId
+            ),
+          ]);
+}}
         />
       )}
       {selectedOrder && (
@@ -1105,7 +1093,7 @@ const metrics = balance
           onSuccess={(created) =>
             showSuccess(
               created
-                ? `Withdrawal request submitted! You will receive ${Number(created.netAmount ?? 0).toLocaleString()}₫ after a ${Number(created.feeAmount ?? 0).toLocaleString()}₫ fee.`
+                ? `Withdrawal request submitted! You will receive ${formatCurrency(created.netAmount)} after a ${formatCurrency(created.feeAmount)} fee.`
                 : "Withdrawal request submitted!"
             )
           }
@@ -1119,17 +1107,10 @@ const metrics = balance
         }
 
         .wallet-scroll-area {
-        max-height: 420px;
-        overflow-y: auto;
-        overflow-x: hidden;
-
-        scrollbar-width: none;
-        -ms-overflow-style: none;
-      }
-
-      .wallet-scroll-area::-webkit-scrollbar {
-        display: none;
-      }
+          width: 100%;
+          min-width: 0;
+          overflow-x: hidden;
+        }
       `}</style>
     </ClientLayout>
   );

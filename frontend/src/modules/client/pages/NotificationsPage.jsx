@@ -35,6 +35,12 @@ const TYPE_CONFIG = {
 
   JOB_INVITED: { icon: "person_add", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
   SYSTEM: { icon: "notifications", color: "#8c90a0", bg: "rgba(140,144,160,0.1)" },
+
+  JOB_CANCELLED_BY_ADMIN: {
+    icon: "cancel",
+    color: "#ef4444",
+    bg: "rgba(239,68,68,0.1)",
+  },
 };
 
 function getTypeCfg(type) {
@@ -119,12 +125,6 @@ function getNotificationTargetUrl(notification) {
     "targetProjectId",
   ]);
 
-  const contractId = getValue(notification, metadata, [
-    "contractId",
-    "relatedContractId",
-    "targetContractId",
-  ]);
-
   const deliverableId = getValue(notification, metadata, [
     "deliverableId",
     "relatedDeliverableId",
@@ -144,20 +144,6 @@ function getNotificationTargetUrl(notification) {
     case "PROPOSAL_REJECTED":
       return proposalId
         ? `/client/proposals/${proposalId}`
-        : "/client/projects";
-
-    case "CONTRACT_CONFIRMED_PENDING_ESCROW":
-      return contractId
-        ? `/client/contracts/${contractId}`
-        : projectId
-          ? `/client/projects/${projectId}`
-          : "/client/projects";
-
-    case "CONTRACT_CONFIRMED_ESCROW_LOCKED":
-    case "ESCROW_LOCKED":
-    case "ESCROW_LOCK_EXPIRED":
-      return projectId
-        ? `/client/projects/${projectId}`
         : "/client/projects";
 
     case "MILESTONE_OVERDUE":
@@ -190,6 +176,26 @@ function getNotificationTargetUrl(notification) {
     case "JOB_INVITED":
       return "/expert/messages";
 
+      case "CONTRACT_SIGN_EXPIRED":
+  return proposalId
+    ? `/client/proposals/${proposalId}`
+    : "/client/jobs";
+
+  case "CONTRACT_CONFIRMED_ESCROW_LOCKED":
+  case "ESCROW_LOCKED":
+  case "ESCROW_LOCK_EXPIRED":
+  case "PROJECT_COMPLETED":
+    return projectId
+      ? `/client/projects/${projectId}`
+      : "/client/projects";
+
+  case "DISPUTE_RESOLVED":
+    return projectId
+      ? `/client/disputes?projectId=${projectId}`
+      : "/client/projects";
+
+    case "JOB_CANCELLED_BY_ADMIN":
+      return "/client/jobs?status=CANCELLED";
     default:
       return "/client/notifications";
   }

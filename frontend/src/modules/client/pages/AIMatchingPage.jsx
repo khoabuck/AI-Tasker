@@ -2,11 +2,15 @@
 // POST /api/recommendations/experts/from-prompt   { prompt }  →  Expert[]
 // Response là array trực tiếp, đã sort theo matchScore giảm dần — không còn dùng GET /experts?keyword=
 
+
+// Import hook useState để quản lý state trong React
+// useState giúp component nhớ dữ liệu và tự render lại khi dữ liệu thay đổi
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import { aiMatchingService } from "../../../services/aiMatching.service";
 
+//object cấu hình hiển thị level. Chuyển dữ liệu level từ Backend thành giao diện hiển thị.
 const LEVEL_CONFIG = {
   JUNIOR:  { label: "Junior",  badge: "bg-slate-400/20 text-slate-400 border-slate-400/40" },
   MID:     { label: "Mid",     badge: "bg-yellow-400/20 text-yellow-400 border-yellow-400/40" },
@@ -14,15 +18,92 @@ const LEVEL_CONFIG = {
   EXPERT:  { label: "Expert",  badge: "bg-indigo-300/20 text-indigo-300 border-indigo-300/40" },
 };
 
+// Nhận số điểm rating và chuyển thành biểu tượng sao.
+function StarRating({ rating }) {
+  const safeRating = Math.max(
+    0,
+    Math.min(5, Number(rating ?? 0))
+  );
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const isFull = star <= Math.floor(safeRating);
+        const isHalf = !isFull && star - 0.5 <= safeRating;
+
+        return (
+          <span
+            key={star}
+            className={`material-symbols-outlined text-[15px] ${
+              isFull || isHalf ? "text-yellow-400" : "text-gray-600"
+            }`}
+            style={{
+              fontVariationSettings: isFull || isHalf
+                ? "'FILL' 1"
+                : "'FILL' 0",
+            }}
+          >
+            {isHalf ? "star_half" : "star"}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/*
+Component con: ExpertCard
+
+Nhận dữ liệu từ component cha bằng props:
+
+expert:
+- thông tin một Expert từ API
+
+onConnect:
+- function xử lý khi bấm Connect
+
+onViewProfile:
+- lưu trạng thái trước khi qua trang Profile
+
+Component này chỉ có nhiệm vụ hiển thị 1 Expert.
+*/
 function ExpertCard({ expert, onConnect, onViewProfile }) {
   const navigate = useNavigate();
-  const level = LEVEL_CONFIG[expert.level] || { label: expert.level, badge: "bg-gray-500/20 text-gray-400 border-gray-500/40" };
+  // Chuẩn hóa dữ liệu BE.
+// BE có thể trả MID hoặc MID_LEVEL.
+// Trong nghiệp vụ hai giá trị này là cùng một level.
+  const normalizedLevel =
+    expert.level === "MID_LEVEL"
+      ? "MID"
+      : expert.level;
+
+  const level = LEVEL_CONFIG[normalizedLevel] || {
+    label: expert.level,
+    badge: "bg-gray-500/20 text-gray-400 border-gray-500/40"
+  };
+  // Lấy điểm matching từ BE.  FE chỉ hiển thị, không tự tính score.
   const matchScore = expert.matchScore ? Math.round(expert.matchScore) : null;
+
+  // Rating/review lấy trực tiếp từ BE.
+  // Không dùng profileScore để tính sao.
+  const rating = Math.max(
+    0,
+    Math.min(5, Number(expert.averageRating ?? 0))
+  );
+
+  const totalReviews = Math.max(
+    0,
+    Number(expert.totalReviews ?? 0)
+  );
+
+  // Chọn danh sách skill để hiển thị.
+// Hiện tại ưu tiên matchedSkills nếu AI tìm được skill phù hợp.
+// Nếu không có thì dùng expertSkills.
   const skillsToShow = expert.matchedSkills?.length > 0 ? expert.matchedSkills : expert.expertSkills || [];
   const isMatchedSkills = expert.matchedSkills?.length > 0;
 
   return (
-    <div className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-[#101319]/85 p-6 backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-cyan-400/40">
+    <div className="relative flex h-full flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-[#101319]/85 p-6 backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-cyan-400/40">
 
       {/* Match score badge */}
       {matchScore !== null && (
@@ -33,9 +114,12 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
 
       {/* Header */}
       <div className="flex items-start gap-3.5">
-        <img src={expert.avatarUrl || `https://i.pravatar.cc/100?u=${expert.expertProfileId}`}
+        <img
+          src={expert.avatarUrl}
           alt={expert.fullName}
-          className="h-13 w-13 flex-shrink-0 rounded-full border-2 border-cyan-400/20 object-cover" style={{ width: 52, height: 52 }} />
+          className="h-13 w-13 flex-shrink-0 rounded-full border-2 border-cyan-400/20 object-cover"
+          style={{ width: 52, height: 52 }}
+        />
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex items-center gap-2">
             <h3 className="font-display text-base font-bold text-gray-100">{expert.fullName}</h3>
@@ -44,19 +128,36 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
             </span>
           </div>
           <p className="font-mono text-xs text-cyan-400">{expert.professionalTitle}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <StarRating rating={rating} />
+
+            {totalReviews > 0 ? (
+              <span className="font-mono text-[11px] text-gray-400">
+                {rating.toFixed(1)} ({totalReviews}{" "}
+                {totalReviews === 1 ? "review" : "reviews"})
+              </span>
+            ) : (
+              <span className="font-mono text-[11px] text-gray-500">
+                No reviews yet
+              </span>
+            )}
+          </div>
+
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <span className="text-[11px] text-gray-400">
               {expert.yearsOfExperience} yr{expert.yearsOfExperience !== 1 ? "s" : ""} exp
             </span>
+
             {expert.availableForWork && (
               <span className="flex items-center gap-1 text-[11px] text-green-400">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400" />
                 Available
               </span>
             )}
+
             {expert.profileScore != null && (
               <span className="text-[11px] text-gray-400">
-                Score: <span className="text-yellow-400">{expert.profileScore}</span>/100
+                Profile score: <span className="text-yellow-400">{expert.profileScore}</span>/100
               </span>
             )}
           </div>
@@ -90,7 +191,7 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
       {/* Skills */}
       {skillsToShow.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {skillsToShow.slice(0, 6).map((s) => (
+          {skillsToShow.map((s) => (
             <span key={s.skillId}
               className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${
                 isMatchedSkills
@@ -103,16 +204,6 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
         </div>
       )}
 
-      {/* Budget */}
-      {(expert.expectedProjectBudgetMin || expert.expectedProjectBudgetMax) && (
-        <div className="flex items-center gap-1.5 text-[13px] text-gray-300">
-          <span className="material-symbols-outlined text-cyan-400" style={{ fontSize: 15 }}>payments</span>
-          <span className="font-mono font-semibold">
-            ${expert.expectedProjectBudgetMin?.toLocaleString()} — ${expert.expectedProjectBudgetMax?.toLocaleString()}
-            <span className="ml-1 text-[11px] font-normal text-gray-400">USD/mo</span>
-          </span>
-        </div>
-      )}
 
       {/* Risk note */}
       {expert.riskNote && (
@@ -123,7 +214,7 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
       )}
 
       {/* Actions */}
-      <div className="flex gap-2.5 pt-1">
+      <div className="mt-auto flex gap-2.5 pt-4">
         <button
           onClick={() => { onViewProfile(); navigate(`/client/experts/${expert.expertProfileId}`); }}
           className="flex-1 rounded-lg border border-white/10 bg-[#1d2026] py-2.5 text-[13px] font-medium text-gray-100 transition-colors hover:bg-[#272a30]">
@@ -139,23 +230,27 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
   );
 }
 
+/*
+Component chính của trang AI Matching.
+
+Nhiệm vụ:
+- Quản lý input tìm kiếm.
+- Gọi API.
+- Lưu danh sách Expert.
+- Điều khiển trạng thái Loading/Error/Result.
+*/
 export default function AIMatchingPage() {
   const navigate = useNavigate();
 
-  // Khôi phục lại query + kết quả search trước đó CHỈ khi quay lại bằng nút
-  // "View Profile" → "Back" (cờ được đặt thủ công lúc bấm View Profile, xem
-  // handleViewProfile bên dưới). Mọi cách khác để vào trang này (click menu,
-  // gõ URL, từ trang khác) không đi qua cờ đó nên luôn bắt đầu sạch.
-  // Đọc xong xóa luôn, để lần remount kế tiếp không qua View Profile sẽ không
-  // còn "ăn" lại data cũ.
+  // Key dùng để lưu tạm trạng thái tìm kiếm AI Matching.
+// Chỉ phục vụ việc quay lại từ trang Profile.
   const SESSION_KEY = "aiMatchingSearchState";
 
-  // recentPrompts ("Try:" gợi ý) là dữ liệu khác hẳn về vòng đời — đây là lịch
-  // sử lâu dài của người dùng, không phải kết quả tạm thời của 1 lượt xem, nên
-  // dùng localStorage riêng và LUÔN đọc/giữ lại bất kể vào trang theo cách nào
-  // (khác hẳn query/experts/hasSearched ở trên chỉ phục hồi khi back từ Profile).
+  // Lưu lịch sử prompt lâu dài của user.
+// Khác với sessionStorage chỉ lưu kết quả tìm kiếm tạm thời.
   const RECENT_PROMPTS_KEY = "aiMatchingRecentPrompts";
 
+  //Khôi phục kết quả tìm kiếm cũ.
   const restoreState = () => {
     try {
       const saved = sessionStorage.getItem(SESSION_KEY);
@@ -177,15 +272,16 @@ export default function AIMatchingPage() {
 
   const initial = restoreState();
 
-  const [query, setQuery] = useState(initial?.query ?? "");
+  const [query, setQuery] = useState(initial?.query ?? ""); //Lưu nội dung Client nhập vào ô tìm kiếm.
   const [searching, setSearching] = useState(false);
-  const [experts, setExperts] = useState(initial?.experts ?? []);
-  const [total, setTotal] = useState(initial?.total ?? 0);
+  const [experts, setExperts] = useState(initial?.experts ?? []); //Lưu danh sách Expert mà AI tìm được.
+  const [total, setTotal] = useState(initial?.total ?? 0); //Lưu tổng số Expert phù hợp.
   const [hasSearched, setHasSearched] = useState(initial?.hasSearched ?? false);
   const [error, setError] = useState("");
-  const [recentPrompts, setRecentPrompts] = useState(restoreRecentPrompts());
+  const [recentPrompts, setRecentPrompts] = useState(restoreRecentPrompts()); 
 
 
+  //Lưu trạng thái tìm kiếm hiện tại trước khi rời trang.
   const saveSearchState = () => {
     try {
       sessionStorage.setItem(
@@ -202,9 +298,7 @@ export default function AIMatchingPage() {
     }
   };
 
-  // Lưu lại state NGAY LÚC bấm "View Profile" — điểm duy nhất đặt cờ cho phép
-  // phục hồi kết quả search khi quay lại bằng nút Back. recentPrompts KHÔNG nằm
-  // trong cờ này vì nó đã tự sống bền trong localStorage riêng (xem handleSearch).
+  //Lưu kết quả search trước khi sang Profile.
   const handleViewProfile = () => {
     try {
       sessionStorage.setItem(SESSION_KEY, JSON.stringify({
@@ -235,36 +329,39 @@ export default function AIMatchingPage() {
         `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
       );
     } catch (err) {
-      console.error("Find conversation failed:", err);
-      alert("Unable to open conversation with the Expert.");
-    }
+        console.error("Find conversation failed:", err);
+        setError(
+          err?.response?.data?.message ||
+            "Unable to open conversation with the Expert."
+        );
+      }
   };
 
   const handleSearch = async (searchText) => {
-    const prompt = (searchText ?? query).trim();
+    const prompt = (searchText ?? query).trim(); // lấy prompt
 
     if (!prompt) return;
 
     setQuery(prompt);
 
+    //Tạo hàm → chạy ngay.
     const updatedRecentPrompts = (() => {
       const updated = [prompt, ...recentPrompts.filter((item) => item !== prompt)];
       return updated.slice(0, 4);
     })();
     setRecentPrompts(updatedRecentPrompts);
     try {
-      localStorage.setItem(RECENT_PROMPTS_KEY, JSON.stringify(updatedRecentPrompts));
+      localStorage.setItem(RECENT_PROMPTS_KEY, JSON.stringify(updatedRecentPrompts));//Lưu lịch sử lâu dài.
     } catch {
       // Bỏ qua nếu localStorage đầy hoặc bị chặn — không ảnh hưởng chức năng chính
     }
 
     setSearching(true);
     setError("");
-    setHasSearched(false);
 
     try {
       const { items, total } =
-        await aiMatchingService.findExpertsFromPrompt(prompt);
+        await aiMatchingService.findExpertsFromPrompt(prompt); // gọi API
 
       setExperts(items);
       setTotal(total);
@@ -281,7 +378,7 @@ export default function AIMatchingPage() {
 
   return (
     <ClientLayout>
-      <div className="px-6 pb-16 pt-12">
+      <div className="min-h-screen overflow-x-hidden px-6 pb-16 pt-12">
 
         {/* Header */}
         <div className="mx-auto mb-10 max-w-[860px] text-center">
@@ -356,9 +453,15 @@ export default function AIMatchingPage() {
 
         {/* Loading */}
         {searching && (
-          <div className="py-16 text-center">
-            <span className="material-symbols-outlined mb-4 block animate-spin text-cyan-400" style={{ fontSize: 56 }}>autorenew</span>
-            <p className="font-mono text-[15px] text-cyan-400">Analyzing and finding experts...</p>
+          <div className="flex min-h-[500px] items-center justify-center text-center">
+            <div>
+              <span className="material-symbols-outlined mb-4 block animate-spin text-cyan-400" style={{ fontSize: 56 }}>
+                autorenew
+              </span>
+              <p className="font-mono text-[15px] text-cyan-400">
+                Analyzing and finding experts...
+              </p>
+            </div>
           </div>
         )}
 
@@ -392,7 +495,17 @@ export default function AIMatchingPage() {
             </div>
 
             {experts.length > 0 ? (
-              <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))" }}>
+              <div
+                className="
+                  grid
+                  w-full
+                  gap-5
+                "
+                style={{
+                  gridTemplateColumns:
+                  "repeat(auto-fit, minmax(min(320px,100%),1fr))"
+                }}
+                >
                 {experts.map((expert) => (
                   <ExpertCard key={expert.expertProfileId} expert={expert} onConnect={handleConnect} onViewProfile={handleViewProfile} />
                 ))}

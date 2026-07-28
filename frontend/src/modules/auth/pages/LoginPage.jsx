@@ -2,19 +2,21 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import { useAuth } from "../../../context/AuthContext";
-import { clearAuth } from "../../../utils/auth.utils";
 
+// biến tổng số giây thành phút 
+// 125s --> 2:05
 const formatCountdown = (totalSeconds) => {
-  const safeSeconds = Math.max(0, Number(totalSeconds || 0));
+  const safeSeconds = Math.max(0, Number(totalSeconds || 0)); // bảo vệ dữ liệu 
   const minutes = Math.floor(safeSeconds / 60);
   const seconds = safeSeconds % 60;
 
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
     2,
     "0"
-  )}`;
+  )}`; // trên tính giây là 5s thì sẽ đỏi thành 05
 };
 
+// tính user còn bị khóa login bao nhiêu giây.
 const calculateRemainingSeconds = (
   blockedUntilUtc,
   fallbackSeconds = 0
@@ -33,8 +35,11 @@ const calculateRemainingSeconds = (
   return Math.max(0, Number(fallbackSeconds || 0));
 };
 
+// Tên key dùng để lưu thông tin khóa login
 const LOGIN_BLOCK_STORAGE_KEY = "aitasker_login_block";
 
+ // xác định chính xác:
+// "User bị khóa tới thời điểm nào?"
 const resolveBlockedUntilUtc = (
   blockedUntilUtc,
   retryAfterSeconds = 0
@@ -63,8 +68,11 @@ const resolveBlockedUntilUtc = (
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { handleLoginSuccess } = useAuth();
+  // Lấy hàm handleLoginSuccess
+  // từ AuthContext.
+  const { handleLoginSuccess } = useAuth(); // User đã đăng nhập
 
+  // State login
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -72,12 +80,17 @@ export default function LoginPage() {
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // sate UI
   const [focusField, setFocusField] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  // 3 state nhiệm vụ khóa login tạm thời
   const [blockedUntilUtc, setBlockedUntilUtc] = useState(null);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const [showBlockPopup, setShowBlockPopup] = useState(false);
 
+  // Khi LoginPage vừa mở, kiểm tra trước đó user có đang bị khóa login hay không.
   useEffect(() => {
   try {
     const storedBlock = sessionStorage.getItem(
@@ -108,6 +121,9 @@ export default function LoginPage() {
   }
 }, []);
 
+//=====================================================
+
+// chạy countdown trong thời gian khóa
   useEffect(() => {
   if (!showBlockPopup || remainingSeconds <= 0) {
     return undefined;
@@ -137,6 +153,8 @@ export default function LoginPage() {
   remainingSeconds,
 ]);
 
+  // Hàm này được gọi khi user nhập
+  // Email hoặc Password.
   const handleChange = (event) => {
     const { name, value } = event.target;
 
@@ -150,7 +168,7 @@ export default function LoginPage() {
     }
   };
 
-
+ // rồi quyết định user phải đi trang nào.
   const goNextByRoleAndStatus = ({ role, status, email }) => {
     const normalizedRole = String(role || "").toUpperCase();
     const normalizedStatus = String(status || "").toUpperCase();
@@ -229,23 +247,28 @@ export default function LoginPage() {
   };
 
   const handleSubmit = async (event) => {
+    // user bấm login
   event.preventDefault();
 
+  // kiểm tra xem có đc login ko
   if (loading || remainingSeconds > 0) {
     return;
   }
 
+  // chuẩn bị gọi api
   setLoading(true);
   setError("");
 
   try {
     const email = form.email.trim();
 
+    // gọi API qua qua authService
     const result = await authService.login({
       email,
       password: form.password,
     });
 
+    // login ko thành công
     if (!result.success) {
       if (result.code === "LOGIN_TEMPORARILY_BLOCKED") {
   const resolvedBlockedUntilUtc = resolveBlockedUntilUtc(
@@ -280,6 +303,7 @@ export default function LoginPage() {
       setError(result.message || "Login failed.");
       return;
     }
+    // login thành công
     sessionStorage.removeItem(LOGIN_BLOCK_STORAGE_KEY);
     setBlockedUntilUtc(null);
     setRemainingSeconds(0);
@@ -292,9 +316,11 @@ export default function LoginPage() {
       return;
     }
 
+    // xác định role
     const finalRole = finalUser.role || result.role;
     const finalStatus = finalUser.status || result.status;
 
+    //thông báo auth context
     handleLoginSuccess({
       user: {
         ...finalUser,
@@ -304,6 +330,7 @@ export default function LoginPage() {
       expiresAt: result.expiresAt || null,
     });
 
+    // điều hướng, quyết định user đi vào trang nào
     goNextByRoleAndStatus({
       role: finalRole,
       status: finalStatus,
@@ -317,16 +344,7 @@ export default function LoginPage() {
 };
 
   const handleGoogleLogin = () => {
-    const backendUrl = String(
-      import.meta.env.VITE_BACKEND_BASE_URL || ""
-    ).replace(/\/+$/, "");
-
-    if (!backendUrl) {
-      setError("Missing VITE_BACKEND_BASE_URL");
-      return;
-    }
-
-    window.location.assign(`${backendUrl}/api/auth/google-login`);
+    authService.loginWithGoogle();
   };
 
   return (

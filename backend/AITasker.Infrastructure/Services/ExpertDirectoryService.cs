@@ -85,13 +85,49 @@ public class ExpertDirectoryService : IExpertDirectoryService
             .Take(safePageSize)
             .ToListAsync();
 
+        var expertUserIds = experts
+            .Select(expert => expert.UserId)
+            .ToList();
+
+        var reviewSummaries = await _dbContext.Reviews
+            .AsNoTracking()
+            .Where(review =>
+                expertUserIds.Contains(review.ExpertId) &&
+                review.Status == ReviewStatusVisible)
+            .GroupBy(review => review.ExpertId)
+            .Select(group => new
+            {
+                ExpertUserId = group.Key,
+                TotalReviews = group.Count(),
+                AverageRating = group.Average(review => (decimal)review.Rating)
+            })
+            .ToDictionaryAsync(summary => summary.ExpertUserId);
+
+        var items = experts
+            .Select(ToResponse)
+            .ToList();
+
+        foreach (var item in items)
+        {
+            if (reviewSummaries.TryGetValue(item.UserId, out var reviewSummary))
+            {
+                item.AverageRating = Math.Round(reviewSummary.AverageRating, 2);
+                item.TotalReviews = reviewSummary.TotalReviews;
+            }
+            else
+            {
+                item.AverageRating = 0m;
+                item.TotalReviews = 0;
+            }
+        }
+
         return new ExpertDirectoryPagedResponse
         {
             Page = safePage,
             PageSize = safePageSize,
             TotalItems = totalItems,
             TotalPages = (int)Math.Ceiling(totalItems / (double)safePageSize),
-            Items = experts.Select(ToResponse).ToList()
+            Items = items
         };
     }
 

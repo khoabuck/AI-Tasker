@@ -369,7 +369,7 @@ export default function ClientProfileSetupPage() {
         {/* Footer */}
         <footer className="mt-16 flex flex-col md:flex-row justify-between items-center
                            gap-4 text-gray-600 text-xs font-mono uppercase tracking-widest">
-          <span>© 2024 AI Tasker | The Digital Workbench</span>
+          <span>© 2026 AI Tasker | The Digital Workbench</span>
           <div className="flex gap-6">
             {["Privacy Protocol", "Security Standards", "Support"].map((l) => (
               <a key={l} href="#" className="hover:text-blue-400 transition-colors">{l}</a>

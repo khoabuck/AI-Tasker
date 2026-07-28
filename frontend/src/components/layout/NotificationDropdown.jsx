@@ -206,12 +206,6 @@ function getNotificationTargetUrl(notification) {
     "targetProjectId",
   ]);
 
-  const contractId = getValue(notification, metadata, [
-    "contractId",
-    "relatedContractId",
-    "targetContractId",
-  ]);
-
   switch (type) {
     case "CHAT_MESSAGE_RECEIVED":
     case "MESSAGE_RECEIVED":
@@ -225,18 +219,6 @@ function getNotificationTargetUrl(notification) {
     case "PROPOSAL_REJECTED":
       return proposalId
         ? `/client/proposals/${proposalId}`
-        : "/client/projects";
-
-    case "CONTRACT_CONFIRMED_PENDING_ESCROW":
-      return contractId
-        ? `/client/contracts/${contractId}`
-        : "/client/projects";
-
-    case "CONTRACT_CONFIRMED_ESCROW_LOCKED":
-    case "ESCROW_LOCKED":
-    case "ESCROW_LOCK_EXPIRED":
-      return projectId
-        ? `/client/projects/${projectId}`
         : "/client/projects";
 
     case "MILESTONE_OVERDUE":
@@ -268,6 +250,24 @@ function getNotificationTargetUrl(notification) {
 
     case "JOB_INVITED":
       return "/expert/messages";
+
+    case "CONTRACT_SIGN_EXPIRED":
+  return proposalId
+    ? `/client/proposals/${proposalId}`
+    : "/client/jobs";
+
+  case "CONTRACT_CONFIRMED_ESCROW_LOCKED":
+  case "ESCROW_LOCKED":
+  case "ESCROW_LOCK_EXPIRED":
+  case "PROJECT_COMPLETED":
+    return projectId
+      ? `/client/projects/${projectId}`
+      : "/client/projects";
+
+  case "DISPUTE_RESOLVED":
+    return projectId
+      ? `/client/disputes?projectId=${projectId}`
+      : "/client/projects";
 
     default:
       return "/client/notifications";
