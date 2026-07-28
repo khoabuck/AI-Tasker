@@ -24,16 +24,10 @@ const RATING_OPTIONS = [
   { label: "1 star", value: "1" },
 ];
 
-// Khôi phục query + kết quả search khi quay lại trang này (vd: bấm Back từ
-// ExpertProfileViewPage) — ExpertSearchPage là route riêng, unmount hoàn toàn
-// khi điều hướng đi nên useState bình thường luôn reset rỗng lúc remount.
-// sessionStorage giữ được state qua việc đó, tự xóa khi đóng tab.
+// Lưu trạng thái search tạm thời.
 const SESSION_KEY = "expertSearchState";
 
-// Đọc 1 lần rồi xóa luôn — chỉ "View Profile" mới được phép đặt cờ này trước
-// khi điều hướng đi. Mọi cách vào trang khác (click menu, gõ URL, từ trang khác)
-// sẽ không có cờ này nên luôn bắt đầu sạch. Xóa ngay sau khi đọc để lần remount
-// kế tiếp (không qua View Profile) không bị "ăn" lại data cũ.
+//Khôi phục kết quả search cũ.
 function restoreState() {
   try {
     const saved = sessionStorage.getItem(SESSION_KEY);
@@ -44,7 +38,9 @@ function restoreState() {
   }
 }
 
+//Hiển thị số sao.
 function StarRating({ rating, className = "mt-2", sizeClass = "text-[16px]" }) {
+  // ko cho vượt quá 0 - 5 sao
   const safeRating = Math.max(
     0,
     Math.min(5, Number(rating ?? 0))
@@ -70,6 +66,7 @@ function StarRating({ rating, className = "mt-2", sizeClass = "text-[16px]" }) {
   );
 }
 
+// hiện thị 1 expert
 function ExpertCard({ expert, onConnect, onViewProfile }) {
   const navigate = useNavigate();
 
@@ -166,6 +163,7 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
   );
 }
 
+// Lấy toàn bộ Expert từ API.
 async function fetchAllExperts(params) {
   // Không truyền page/pageSize.
   // BE tự dùng cấu hình mặc định và trả page + totalPages.
@@ -217,6 +215,8 @@ export default function ExpertSearchPage() {
 
   const navigate = useNavigate();
 
+  //Lưu lại trạng thái tìm kiếm hiện tại của trang Expert Search trước khi chuyển sang trang khác.
+  // NOTE: sessionStorage chỉ lưu được dạng string. không lưu trực tiếp được. Nên dùng JSON.stringify()
   const saveSearchState = () => {
   try {
     sessionStorage.setItem(
@@ -238,15 +238,20 @@ export default function ExpertSearchPage() {
     saveSearchState();
     setConnectError("");
     try {
+      // Client hiện tại đã từng chat với Expert này chưa?
       const existing = await findExistingConversationWithExpert(axiosInstance, {
         expertUserId: expert.userId,
       });
 
+      // Nếu đã có conversation
+      // ?. optional chaining. Kiểm tra an toàn.
       if (existing?.conversationId) {
-        navigate(`/client/messages/${existing.conversationId}`);
+        navigate(`/client/messages/${existing.conversationId}`); // mở chat cũ nếu tr đó đa có nhắn tin
         return;
       }
 
+      // Nếu ch có conversation
+      //Chuyển sang trang Messages nhưng truyền thông tin Expert cần tạo chat.
       navigate(
         `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
       );
@@ -258,6 +263,7 @@ export default function ExpertSearchPage() {
     }
   };
 
+  //Xử lý chọn/bỏ chọn filter level.
   const toggleSeniority = (key) => {
     setSeniority((prev) => (prev === key ? "" : key));
   };
@@ -293,14 +299,16 @@ export default function ExpertSearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  //Đây là hàm xử lý hành động Search Expert.
   const handleSearch = async (override = {}) => {
-    const nextQuery = override.query ?? query;
+    const nextQuery = override.query ?? query; //Lấy query để tìm. ??: Nếu bên trái có giá trị thì dùng, nếu không thì lấy bên phải.
     const nextSeniority = override.seniority ?? seniority;
     const nextRatingFilter = override.ratingFilter ?? ratingFilter;
 
     setSearching(true);
 
     try {
+      //Tìm cấu hình level tương ứng.
       const selectedOption = SENIORITY_OPTIONS.find(
         (s) => s.key === nextSeniority
       );
@@ -312,6 +320,8 @@ export default function ExpertSearchPage() {
           ? selectedOption.values[0]
           : undefined;
 
+       //Gọi Backend lấy danh sách Expert.
+       //Gọi API
       let items = await fetchAllExperts({
         keyword: nextQuery.trim() || undefined,
         level: levelParam,

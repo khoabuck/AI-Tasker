@@ -6,14 +6,14 @@ import { useAuth } from "../../../context/AuthContext";
 // biến tổng số giây thành phút 
 // 125s --> 2:05
 const formatCountdown = (totalSeconds) => {
-  const safeSeconds = Math.max(0, Number(totalSeconds || 0));
+  const safeSeconds = Math.max(0, Number(totalSeconds || 0)); // bảo vệ dữ liệu 
   const minutes = Math.floor(safeSeconds / 60);
   const seconds = safeSeconds % 60;
 
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
     2,
     "0"
-  )}`;
+  )}`; // trên tính giây là 5s thì sẽ đỏi thành 05
 };
 
 // tính user còn bị khóa login bao nhiêu giây.
@@ -70,7 +70,7 @@ export default function LoginPage() {
   const navigate = useNavigate();
   // Lấy hàm handleLoginSuccess
   // từ AuthContext.
-  const { handleLoginSuccess } = useAuth();
+  const { handleLoginSuccess } = useAuth(); // User đã đăng nhập
 
   // State login
   const [form, setForm] = useState({

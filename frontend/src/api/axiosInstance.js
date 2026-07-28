@@ -1,5 +1,6 @@
 import axios from "axios";
 
+//Lấy địa chỉ Backend API từ file môi trường .env.
 const getApiBaseUrl = () => {
   const configuredUrl =
     import.meta.env.VITE_API_BASE_URL?.trim();

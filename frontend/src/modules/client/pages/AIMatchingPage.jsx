@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import { aiMatchingService } from "../../../services/aiMatching.service";
 
+//object cấu hình hiển thị level. Chuyển dữ liệu level từ Backend thành giao diện hiển thị.
 const LEVEL_CONFIG = {
   JUNIOR:  { label: "Junior",  badge: "bg-slate-400/20 text-slate-400 border-slate-400/40" },
   MID:     { label: "Mid",     badge: "bg-yellow-400/20 text-yellow-400 border-yellow-400/40" },
@@ -17,6 +18,7 @@ const LEVEL_CONFIG = {
   EXPERT:  { label: "Expert",  badge: "bg-indigo-300/20 text-indigo-300 border-indigo-300/40" },
 };
 
+// Nhận số điểm rating và chuyển thành biểu tượng sao.
 function StarRating({ rating }) {
   const safeRating = Math.max(
     0,
@@ -240,20 +242,15 @@ Nhiệm vụ:
 export default function AIMatchingPage() {
   const navigate = useNavigate();
 
-  // Khôi phục lại query + kết quả search trước đó CHỈ khi quay lại bằng nút
-  // "View Profile" → "Back" (cờ được đặt thủ công lúc bấm View Profile, xem
-  // handleViewProfile bên dưới). Mọi cách khác để vào trang này (click menu,
-  // gõ URL, từ trang khác) không đi qua cờ đó nên luôn bắt đầu sạch.
-  // Đọc xong xóa luôn, để lần remount kế tiếp không qua View Profile sẽ không
-  // còn "ăn" lại data cũ.
+  // Key dùng để lưu tạm trạng thái tìm kiếm AI Matching.
+// Chỉ phục vụ việc quay lại từ trang Profile.
   const SESSION_KEY = "aiMatchingSearchState";
 
-  // recentPrompts ("Try:" gợi ý) là dữ liệu khác hẳn về vòng đời — đây là lịch
-  // sử lâu dài của người dùng, không phải kết quả tạm thời của 1 lượt xem, nên
-  // dùng localStorage riêng và LUÔN đọc/giữ lại bất kể vào trang theo cách nào
-  // (khác hẳn query/experts/hasSearched ở trên chỉ phục hồi khi back từ Profile).
+  // Lưu lịch sử prompt lâu dài của user.
+// Khác với sessionStorage chỉ lưu kết quả tìm kiếm tạm thời.
   const RECENT_PROMPTS_KEY = "aiMatchingRecentPrompts";
 
+  //Khôi phục kết quả tìm kiếm cũ.
   const restoreState = () => {
     try {
       const saved = sessionStorage.getItem(SESSION_KEY);
@@ -275,16 +272,16 @@ export default function AIMatchingPage() {
 
   const initial = restoreState();
 
-// query: nội dung người dùng nhập vào ô search.
-  const [query, setQuery] = useState(initial?.query ?? "");
+  const [query, setQuery] = useState(initial?.query ?? ""); //Lưu nội dung Client nhập vào ô tìm kiếm.
   const [searching, setSearching] = useState(false);
-  const [experts, setExperts] = useState(initial?.experts ?? []);
-  const [total, setTotal] = useState(initial?.total ?? 0);
+  const [experts, setExperts] = useState(initial?.experts ?? []); //Lưu danh sách Expert mà AI tìm được.
+  const [total, setTotal] = useState(initial?.total ?? 0); //Lưu tổng số Expert phù hợp.
   const [hasSearched, setHasSearched] = useState(initial?.hasSearched ?? false);
   const [error, setError] = useState("");
-  const [recentPrompts, setRecentPrompts] = useState(restoreRecentPrompts());
+  const [recentPrompts, setRecentPrompts] = useState(restoreRecentPrompts()); 
 
 
+  //Lưu trạng thái tìm kiếm hiện tại trước khi rời trang.
   const saveSearchState = () => {
     try {
       sessionStorage.setItem(
@@ -301,9 +298,7 @@ export default function AIMatchingPage() {
     }
   };
 
-  // Lưu lại state NGAY LÚC bấm "View Profile" — điểm duy nhất đặt cờ cho phép
-  // phục hồi kết quả search khi quay lại bằng nút Back. recentPrompts KHÔNG nằm
-  // trong cờ này vì nó đã tự sống bền trong localStorage riêng (xem handleSearch).
+  //Lưu kết quả search trước khi sang Profile.
   const handleViewProfile = () => {
     try {
       sessionStorage.setItem(SESSION_KEY, JSON.stringify({
@@ -343,19 +338,20 @@ export default function AIMatchingPage() {
   };
 
   const handleSearch = async (searchText) => {
-    const prompt = (searchText ?? query).trim();
+    const prompt = (searchText ?? query).trim(); // lấy prompt
 
     if (!prompt) return;
 
     setQuery(prompt);
 
+    //Tạo hàm → chạy ngay.
     const updatedRecentPrompts = (() => {
       const updated = [prompt, ...recentPrompts.filter((item) => item !== prompt)];
       return updated.slice(0, 4);
     })();
     setRecentPrompts(updatedRecentPrompts);
     try {
-      localStorage.setItem(RECENT_PROMPTS_KEY, JSON.stringify(updatedRecentPrompts));
+      localStorage.setItem(RECENT_PROMPTS_KEY, JSON.stringify(updatedRecentPrompts));//Lưu lịch sử lâu dài.
     } catch {
       // Bỏ qua nếu localStorage đầy hoặc bị chặn — không ảnh hưởng chức năng chính
     }
@@ -365,7 +361,7 @@ export default function AIMatchingPage() {
 
     try {
       const { items, total } =
-        await aiMatchingService.findExpertsFromPrompt(prompt);
+        await aiMatchingService.findExpertsFromPrompt(prompt); // gọi API
 
       setExperts(items);
       setTotal(total);

@@ -442,7 +442,7 @@ export default function MilestoneDeliverablesPage() {
               </div>
             )}
 
-            {deliverables.length > 0 && (
+            {deliverables.length > 1 && (
               <div className="mb-5 rounded-2xl border border-white/10 bg-[#101319]/85 p-7 shadow-xl backdrop-blur-xl">
                 <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
                   <div>
@@ -461,7 +461,7 @@ export default function MilestoneDeliverablesPage() {
                 </div>
 
                 <div className="flex flex-col gap-3">
-                  {deliverables.map((item) => {
+                  {deliverables.slice(1).map((item) => {
                     const itemStatus = String(
                       item?.status ?? ""
                     )
