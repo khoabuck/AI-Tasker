@@ -38,13 +38,21 @@ const extractImageUrl = (response) => {
     data.fullPath ||
     data.publicUrl ||
     data.secureUrl ||
+    data.image?.url ||
+    data.image?.Url ||
+    data.image?.secureUrl ||
+    data.image?.SecureUrl ||
     data.data?.avatarUrl ||
     data.data?.imageUrl ||
     data.data?.fileUrl ||
     data.data?.url ||
     data.data?.path ||
     data.data?.publicUrl ||
-    data.data?.secureUrl;
+    data.data?.secureUrl ||
+    data.data?.image?.url ||
+    data.data?.image?.Url ||
+    data.data?.image?.secureUrl ||
+    data.data?.image?.SecureUrl;
 
   return toAbsoluteUrl(possibleUrl);
 };
@@ -62,4 +70,4 @@ const uploadService = {
   },
 };
 
-export default uploadService;
+export default uploadService; 

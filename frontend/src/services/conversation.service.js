@@ -283,6 +283,10 @@ const normalizeMessage = (item) => {
       ""
     ),
 
+    messageType: String(
+      getValue(item.messageType, item.MessageType, item.type, item.Type, "TEXT")
+    ).toUpperCase(),
+
     attachmentUrl: getValue(
       item.attachmentUrl,
       item.AttachmentUrl,
@@ -388,31 +392,62 @@ const buildCreateConversationPayload = (data = {}) => {
   setNumberField(
     request,
     "relatedProposalId",
-    getValue(data.relatedProposalId, data.RelatedProposalId, data.proposalId, data.ProposalId)
+    getValue(
+      data.relatedProposalId,
+      data.RelatedProposalId,
+      data.proposalId,
+      data.ProposalId
+    )
   );
   setNumberField(
     request,
     "relatedContractId",
-    getValue(data.relatedContractId, data.RelatedContractId, data.contractId, data.ContractId)
+    getValue(
+      data.relatedContractId,
+      data.RelatedContractId,
+      data.contractId,
+      data.ContractId
+    )
   );
   setNumberField(
     request,
     "relatedProjectId",
-    getValue(data.relatedProjectId, data.RelatedProjectId, data.projectId, data.ProjectId)
+    getValue(
+      data.relatedProjectId,
+      data.RelatedProjectId,
+      data.projectId,
+      data.ProjectId
+    )
   );
   setNumberField(
     request,
     "relatedMilestoneId",
-    getValue(data.relatedMilestoneId, data.RelatedMilestoneId, data.milestoneId, data.MilestoneId)
+    getValue(
+      data.relatedMilestoneId,
+      data.RelatedMilestoneId,
+      data.milestoneId,
+      data.MilestoneId
+    )
   );
   setNumberField(
     request,
     "relatedDisputeId",
-    getValue(data.relatedDisputeId, data.RelatedDisputeId, data.disputeId, data.DisputeId)
+    getValue(
+      data.relatedDisputeId,
+      data.RelatedDisputeId,
+      data.disputeId,
+      data.DisputeId
+    )
   );
 
   const initialMessage = trim(
-    getValue(data.initialMessage, data.InitialMessage, data.message, data.content, "")
+    getValue(
+      data.initialMessage,
+      data.InitialMessage,
+      data.message,
+      data.content,
+      ""
+    )
   );
 
   if (initialMessage) {
@@ -429,12 +464,30 @@ const buildSendMessagePayload = (payload = {}) => {
     };
   }
 
+  const attachmentUrl = trim(
+    getValue(payload.attachmentUrl, payload.fileUrl, "")
+  );
+
+  const messageType = String(
+    getValue(
+      payload.messageType,
+      payload.MessageType,
+      payload.type,
+      attachmentUrl ? "FILE" : "TEXT"
+    )
+  )
+    .trim()
+    .toUpperCase();
+
   return {
-    content: trim(getValue(payload.content, payload.message, payload.messageText, "")),
+    content: trim(
+      getValue(payload.content, payload.message, payload.messageText, "")
+    ),
+    messageType,
     messageText: trim(
       getValue(payload.messageText, payload.message, payload.content, "")
     ),
-    attachmentUrl: trim(getValue(payload.attachmentUrl, payload.fileUrl, "")),
+    attachmentUrl,
   };
 };
 
@@ -447,6 +500,7 @@ const conversationService = {
       request.expertUserId ||
       request.clientProfileId ||
       request.expertProfileId;
+
     const hasRelatedEntity =
       request.relatedJobId ||
       request.relatedProposalId ||
@@ -456,7 +510,9 @@ const conversationService = {
       request.relatedDisputeId;
 
     if (!hasParticipant && !hasRelatedEntity) {
-      throw new Error("A participant or related item is required to create conversation.");
+      throw new Error(
+        "A participant or related item is required to create conversation."
+      );
     }
 
     const response = await conversationApi.createConversation(request);
