@@ -52,7 +52,13 @@ const buildPayload = (form) => ({
   complexity: form.complexity || null,
   expectedDeliverables: form.expectedDeliverables || "",
   isAiAssisted: Boolean(form.isAiAssisted),
-  skillIds: form.skills.filter((s) => s.id > 0).map((s) => s.id),
+  skillIds: form.skills
+    .map((s) => Number(s.id))
+    .filter(
+      (id) =>
+        Number.isInteger(id) &&
+        id > 0
+    ),
 });
 
 export default function EditJobPage() {
@@ -61,7 +67,6 @@ export default function EditJobPage() {
 
   const [form, setForm] = useState(null);
   const [originalStatus, setOriginalStatus] = useState("");
-  const [customSkill, setCustomSkill] = useState("");
   const [skillOptions, setSkillOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
@@ -198,24 +203,6 @@ export default function EditJobPage() {
         prev.includes(skill.name) ? prev : [...prev, skill.name]
       );
     }
-  };
-
-  const addCustomSkill = () => {
-    const s = customSkill.trim();
-    if (!s) return;
-    const exists = form.skills.find((sk) => sk.name.toLowerCase() === s.toLowerCase());
-    if (!exists) {
-      setForm((prev) => ({
-        ...prev,
-        skills: [...prev.skills, { id: -(Date.now()), name: s }],
-      }));
-
-      const isOriginal = originalSkillNames.includes(s.toLowerCase());
-      if (wasAiAssisted && !isOriginal) {
-        setIrrelevantSkills((prev) => (prev.includes(s) ? prev : [...prev, s]));
-      }
-    }
-    setCustomSkill("");
   };
 
   const validateForm = () => {
@@ -541,7 +528,10 @@ export default function EditJobPage() {
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
               {skillOptions.map((skill) => {
-                const selected = !!form.skills.find((s) => s.id === skill.id);
+                const selected = form.skills.some(
+                  (s) =>
+                    Number(s.id) === Number(skill.id)
+                );
                 const isIrrelevant = wasAiAssisted && irrelevantSkills.some(
                   (name) => name.toLowerCase() === skill.name.toLowerCase()
                 );
@@ -577,48 +567,6 @@ export default function EditJobPage() {
                 );
               })}
             </div>
-
-            {/* Custom skill */}
-            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-              <input
-                value={customSkill}
-                onChange={(e) => setCustomSkill(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomSkill(); } }}
-                placeholder="Type a custom skill and press Enter..."
-                style={{ ...inputStyle, flex: 1, fontSize: 13, padding: "8px 14px" }}
-                onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-              <button type="button" onClick={addCustomSkill}
-                style={{ padding: "8px 16px", background: "#232A35", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#e1e2eb", cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#32353b")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "#232A35")}>
-                Add
-              </button>
-            </div>
-
-            {/* Custom skills đã thêm (id âm) */}
-            {form.skills.filter((s) => s.id < 0).length > 0 && (
-              <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {form.skills.filter((s) => s.id < 0).map((s) => {
-                const isIrrelevant = wasAiAssisted && irrelevantSkills.some(
-                  (name) => name.toLowerCase() === s.name.toLowerCase()
-                );
-                return (
-                  <span key={s.id} style={{
-                    display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, fontSize: 11, fontFamily: "JetBrains Mono, monospace",
-                    background: isIrrelevant ? "rgba(245,158,11,0.1)" : "rgba(0,240,255,0.08)",
-                    border: isIrrelevant ? "1px solid rgba(245,158,11,0.4)" : "1px solid rgba(0,240,255,0.25)",
-                    color: isIrrelevant ? "#fbbf24" : "#00F0FF",
-                  }}>
-                    {isIrrelevant && <span className="material-symbols-outlined" style={{ fontSize: 13 }}>warning</span>}
-                    {s.name}
-                    <button type="button" onClick={() => removeSkill(s)}
-                      style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
-                  </span>
-                );
-              })}
-              </div>
-            )}
 
             {/* Cảnh báo skill nằm ngoài baseline gốc — chỉ hiện khi job vốn
                 được tạo bằng AI Assistant, giống hệt PostJobPage. */}
