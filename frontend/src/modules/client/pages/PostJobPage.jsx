@@ -96,7 +96,7 @@ const buildPayload = (form) => ({
   if (form.budgetMin === "") return "Budget min is required.";
   if (form.budgetMax === "") return "Budget max is required.";
   if (Number.isNaN(budgetMin) || Number.isNaN(budgetMax)) return "Budget must be valid numbers.";
-  if (budgetMin < 0 || budgetMax < 0) return "Budget cannot be negative.";
+  if (budgetMin <= 0 || budgetMax <= 0) return "Budget must be greater than 0.";
   if (budgetMin >= budgetMax) return "Budget min must be less than budget max.";
   if (!form.projectType.trim()) return "Project type is required.";
   if (!form.complexity.trim()) return "Complexity is required.";
@@ -130,7 +130,6 @@ const returnStatus = JOB_RETURN_STATUSES.includes(normalizedReturnStatus)
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [draftSaved, setDraftSaved] = useState(false);
-  const [customSkill, setCustomSkill] = useState("");
   const [aiSuggestedSkills, setAiSuggestedSkills] = useState([]);
   const [irrelevantSkills, setIrrelevantSkills] = useState([]);
   const [clientProfile, setClientProfile] = useState(null);
@@ -310,7 +309,7 @@ const toggleSkill = (skill) => {
   // POST /api/jobs/ai-assistant/analyze
   const handleGenerate = async () => {
     if (!form.description.trim()) {
-      alert("Please enter a description before generating!");
+      setError("Please enter a description before generating!");
       return;
     }
 
@@ -493,35 +492,6 @@ const suggestedSkills = (data.suggestedSkills || [])
   }
 };
 
-
-  const addCustomSkill = () => {
-    const s = customSkill.trim();
-    if (!s) return;
-
-    const exists = form.skills.find(
-      (sk) => sk.name.toLowerCase() === s.toLowerCase()
-    );
-
-    if (!exists) {
-      setForm((prev) => ({
-        ...prev,
-        skills: [...prev.skills, { id: -Date.now(), name: s }],
-      }));
-
-      const isAiSuggested = aiSuggestedSkills.some(
-        (skill) => skill.name.toLowerCase() === s.toLowerCase()
-      );
-
-      if (mode === "ai" && aiSuggestedSkills.length > 0 && !isAiSuggested) {
-        setIrrelevantSkills((prev) =>
-          prev.includes(s) ? prev : [...prev, s]
-        );
-      }
-    }
-
-    setCustomSkill("");
-  };
-
   return (
     <ClientLayout>
       <div style={{ maxWidth: 1280, margin: "0 auto", padding: "48px 32px" }}>
@@ -656,17 +626,15 @@ const suggestedSkills = (data.suggestedSkills || [])
                       <label style={labelStyle}>Budget Range (VND) <span style={{ color: "#f87171" }}>*</span></label>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center" }}>
                         <div style={{ position: "relative" }}>
-                          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>
                           <input type="number" min="0" name="budgetMin" value={form.budgetMin} onChange={handleChange} required
-                            placeholder="Min" style={{ ...inputStyle, paddingLeft: 28 }}
+                            placeholder="Min" style={{ ...inputStyle, paddingLeft: 16 }}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                         </div>
                         <span style={{ color: "#414754", fontSize: 20, textAlign: "center" }}>—</span>
                         <div style={{ position: "relative" }}>
-                          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>
                           <input type="number" min="0" name="budgetMax" value={form.budgetMax} onChange={handleChange} required
-                            placeholder="Max" style={{ ...inputStyle, paddingLeft: 28 }}
+                            placeholder="Max" style={{ ...inputStyle, paddingLeft: 16 }}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                         </div>
@@ -773,23 +741,6 @@ const suggestedSkills = (data.suggestedSkills || [])
                     })}
                   </div>
                   
-                  <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                      <input
-                        value={customSkill}
-                        onChange={(e) => setCustomSkill(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomSkill(); } }}
-                        placeholder="Type a custom skill and press Enter..."
-                        style={{ ...inputStyle, flex: 1, fontSize: 13, padding: "8px 14px" }}
-                        onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                        onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                      <button type="button" onClick={addCustomSkill}
-                        style={{ padding: "8px 16px", background: "#232A35", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#e1e2eb", cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#32353b")}
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "#232A35")}>
-                        Add
-                      </button>
-                    </div>
-
                   {form.skills.length > 0 && (
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
                         {form.skills.map((skill) => (
@@ -872,9 +823,7 @@ const suggestedSkills = (data.suggestedSkills || [])
 
                       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center" }}>
                         <div style={{ position: "relative" }}>
-                          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>
-                            ₫
-                          </span>
+                         
                           <input
                             type="number"
                             min="0"
@@ -882,7 +831,7 @@ const suggestedSkills = (data.suggestedSkills || [])
                             value={form.budgetMin}
                             onChange={handleChange}
                             placeholder="Min"
-                            style={{ ...inputStyle, paddingLeft: 32 }}
+                            style={{ ...inputStyle, paddingLeft: 16 }}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
                           />
@@ -893,9 +842,7 @@ const suggestedSkills = (data.suggestedSkills || [])
                         </span>
 
                         <div style={{ position: "relative" }}>
-                          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>
-                            ₫
-                          </span>
+                         
                           <input
                             type="number"
                             min="0"
@@ -903,7 +850,7 @@ const suggestedSkills = (data.suggestedSkills || [])
                             value={form.budgetMax}
                             onChange={handleChange}
                             placeholder="Max"
-                            style={{ ...inputStyle, paddingLeft: 32 }}
+                            style={{ ...inputStyle, paddingLeft: 16 }}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
                           />
@@ -1131,24 +1078,6 @@ const suggestedSkills = (data.suggestedSkills || [])
                             </button>
                           );
                         })}
-                      </div>
-
-                      {/* Custom skill input */}
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <input
-                          value={customSkill}
-                          onChange={(e) => setCustomSkill(e.target.value)}
-                          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomSkill(); } }}
-                          placeholder="Type a custom skill and press Enter..."
-                          style={{ ...inputStyle, flex: 1, fontSize: 13, padding: "8px 14px" }}
-                          onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                          onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                        <button type="button" onClick={addCustomSkill}
-                          style={{ padding: "8px 16px", background: "#232A35", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#e1e2eb", cursor: "pointer", fontSize: 13, whiteSpace: "nowrap" }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = "#32353b")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = "#232A35")}>
-                          Add
-                        </button>
                       </div>
 
                       {form.skills.length > 0 && (

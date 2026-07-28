@@ -6,12 +6,8 @@ import { getErrorMessage } from "../../../utils/auth.utils";
 const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
-// FIX (root cause of "type 1 character → kicked out of input"):
-// `Shell` trước đây được định nghĩa BÊN TRONG component ResetPasswordPage,
-// nên mỗi lần setForm() chạy (mỗi lần gõ phím) → component re-render →
-// Shell bị tạo lại thành 1 function MỚI mỗi lần → React coi là component
-// khác loại → unmount + remount toàn bộ cây con → input mất focus ngay khi
-// gõ ký tự đầu tiên. Đưa Shell ra ngoài, định nghĩa 1 lần duy nhất là hết bug.
+  // Shell là component dùng để tạo
+  // phần giao diện CHUNG cho trang Reset Password.
 function Shell({ children }) {
   return (
     <div className="min-h-screen bg-[#12151B] text-[#e1e2eb] font-sans">

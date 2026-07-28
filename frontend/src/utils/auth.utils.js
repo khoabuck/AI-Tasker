@@ -5,16 +5,14 @@ const LEGACY_TOKEN_KEYS = [
   "refreshToken",
 ];
 
+//Xóa tất cả token cũ.
 const clearLegacyTokens = () => {
   LEGACY_TOKEN_KEYS.forEach((key) => {
     localStorage.removeItem(key);
   });
 };
 
-/*
- * Chỉ lưu thông tin user để phục vụ hiển thị UI.
- * Phiên đăng nhập thực tế nằm trong HttpOnly cookie do backend quản lý.
- */
+//Lưu thông tin đăng nhập ở frontend sau khi login thành công.
 export const saveAuth = (authData) => {
   if (!authData) return;
 

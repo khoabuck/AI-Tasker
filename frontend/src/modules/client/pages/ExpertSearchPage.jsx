@@ -16,16 +16,18 @@ const SENIORITY_OPTIONS = [
   { label: "Senior",  key: "SENIOR",  values: ["SENIOR"] },
 ];
 
-// Khôi phục query + kết quả search khi quay lại trang này (vd: bấm Back từ
-// ExpertProfileViewPage) — ExpertSearchPage là route riêng, unmount hoàn toàn
-// khi điều hướng đi nên useState bình thường luôn reset rỗng lúc remount.
-// sessionStorage giữ được state qua việc đó, tự xóa khi đóng tab.
+const RATING_OPTIONS = [
+  { label: "5 stars", value: "5" },
+  { label: "4 stars", value: "4" },
+  { label: "3 stars", value: "3" },
+  { label: "2 stars", value: "2" },
+  { label: "1 star", value: "1" },
+];
+
+// Lưu trạng thái search tạm thời.
 const SESSION_KEY = "expertSearchState";
 
-// Đọc 1 lần rồi xóa luôn — chỉ "View Profile" mới được phép đặt cờ này trước
-// khi điều hướng đi. Mọi cách vào trang khác (click menu, gõ URL, từ trang khác)
-// sẽ không có cờ này nên luôn bắt đầu sạch. Xóa ngay sau khi đọc để lần remount
-// kế tiếp (không qua View Profile) không bị "ăn" lại data cũ.
+//Khôi phục kết quả search cũ.
 function restoreState() {
   try {
     const saved = sessionStorage.getItem(SESSION_KEY);
@@ -36,34 +38,71 @@ function restoreState() {
   }
 }
 
-function StarRating({ rating }) {
+//Hiển thị số sao.
+function StarRating({ rating, className = "mt-2", sizeClass = "text-[16px]" }) {
+  // ko cho vượt quá 0 - 5 sao
+  const safeRating = Math.max(
+    0,
+    Math.min(5, Number(rating ?? 0))
+  );
+
   return (
-    <div className="mt-2 flex gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <span key={i} className="material-symbols-outlined text-[16px] text-cyan-400" style={{ fontVariationSettings: "'FILL' 1" }}>
-          {i <= Math.floor(rating) ? "star" : i - 0.5 <= rating ? "star_half" : "star_outline"}
-        </span>
-      ))}
+    <div className={`flex items-center gap-0.5 ${className}`}>
+      {[1, 2, 3, 4, 5].map((star) => {
+        const isActive = star <= Math.floor(safeRating);
+
+        return (
+          <span
+            key={star}
+            className={`${sizeClass} leading-none ${
+              isActive ? "text-yellow-400" : "text-gray-600"
+            }`}
+          >
+            {isActive ? "★" : "☆"}
+          </span>
+        );
+      })}
     </div>
   );
 }
 
+// hiện thị 1 expert
 function ExpertCard({ expert, onConnect, onViewProfile }) {
   const navigate = useNavigate();
 
   const name = expert.fullName;
   const role = expert.professionalTitle;
-  const skills = expert.expertSkills?.map((s) => s.skillName) ?? [];
+  const expertSkillNames =
+  expert.expertSkills
+    ?.map((s) => s.skillName)
+    .filter(Boolean) ?? [];
+
+  const skills =
+    expertSkillNames.length > 0
+      ? expertSkillNames
+      : typeof expert.skills === "string"
+        ? expert.skills
+            .split(",")
+            .map((skill) => skill.trim())
+            .filter(Boolean)
+        : [];
   const bio = expert.bio;
   const badge = expert.level;
-  const rating = expert.profileScore ? expert.profileScore / 20 : 0;
+
+  const rating = Math.max(
+    0,
+    Math.min(5, Number(expert.averageRating ?? 0))
+  );
+
+  const totalReviews = Math.max(
+    0,
+    Number(expert.totalReviews ?? 0)
+  );
+
   const expertProfileId = expert.expertProfileId;
-  const isTertiary = badge === "TOP PICK";
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border border-white/[0.12] p-6 backdrop-blur-md transition-colors ${
-      isTertiary ? "bg-[#101319] hover:border-indigo-300/50" : "bg-[#1d2026]/80 hover:border-cyan-400/50"
-    }`}>
+    <div className="relative overflow-hidden rounded-2xl border border-white/[0.12] bg-[#1d2026]/80 p-6 backdrop-blur-md transition-colors hover:border-cyan-400/50">
       {badge && (
         <div className="absolute right-0 top-0 rounded-bl-xl border-b border-l border-cyan-400/20 bg-cyan-400/[0.09] px-3 py-1">
           <span className="font-mono text-[10px] font-bold text-cyan-400">{badge}</span>
@@ -76,20 +115,30 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
           alt={name}
           className="h-12 w-12 flex-shrink-0 rounded-full border-2 border-cyan-400/20 object-cover" />
         <div>
-          <h4 className="font-display text-lg font-semibold text-gray-100">{name}</h4>
-          <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wide text-cyan-400">{role}</p>
-          {rating > 0 && <StarRating rating={rating} />}
+        <h4 className="font-display text-lg font-semibold text-gray-100">{name}</h4>
+        <p className="mt-0.5 font-mono text-[11px] uppercase tracking-wide text-cyan-400">{role}</p>
+
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <StarRating rating={rating} className="" />
+
+          {totalReviews > 0 ? (
+            <span className="font-mono text-[11px] text-gray-400">
+              {rating.toFixed(1)} ({totalReviews}{" "}
+              {totalReviews === 1 ? "review" : "reviews"})
+            </span>
+          ) : (
+            <span className="font-mono text-[11px] text-gray-500">
+              No reviews yet
+            </span>
+          )}
         </div>
+      </div>
       </div>
 
       <div className="mb-4 flex flex-wrap gap-2">
         {skills.map((skill) => (
           <span key={skill}
-            className={`rounded px-2 py-1 font-mono text-[10px] ${
-              isTertiary
-                ? "border border-indigo-300/30 bg-indigo-300/10 text-indigo-300"
-                : "border border-white/10 bg-[#272a30]/80 text-gray-300"
-            }`}>
+            className="rounded border border-white/10 bg-[#272a30]/80 px-2 py-1 font-mono text-[10px] text-gray-300">
             {skill}
           </span>
         ))}
@@ -114,17 +163,60 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
   );
 }
 
+// Lấy toàn bộ Expert từ API.
+async function fetchAllExperts(params) {
+  // Không truyền page/pageSize.
+  // BE tự dùng cấu hình mặc định và trả page + totalPages.
+  const firstResponse = await axiosInstance.get("/experts", {
+    params,
+  });
+
+  const firstData = firstResponse.data;
+
+  const allExperts = Array.isArray(firstData?.items)
+    ? [...firstData.items]
+    : [];
+
+  const currentPage = Number(firstData?.page ?? 1);
+  const totalPages = Number(firstData?.totalPages ?? currentPage);
+
+  for (
+    let page = currentPage + 1;
+    page <= totalPages;
+    page += 1
+  ) {
+    const response = await axiosInstance.get("/experts", {
+      params: {
+        ...params,
+        page,
+      },
+    });
+
+    const pageItems = Array.isArray(response.data?.items)
+      ? response.data.items
+      : [];
+
+    allExperts.push(...pageItems);
+  }
+
+  return allExperts;
+}
+
 export default function ExpertSearchPage() {
-  const initial = restoreState();
+  const [initial] = useState(() => restoreState());
 
   const [query, setQuery] = useState(initial?.query ?? "");
   const [seniority, setSeniority] = useState(initial?.seniority ?? "");
+  const [ratingFilter, setRatingFilter] = useState(initial?.ratingFilter ?? "");
   const [searching, setSearching] = useState(false);
   const [experts, setExperts] = useState(initial?.experts ?? []);
   const [hasSearched, setHasSearched] = useState(initial?.hasSearched ?? false);
+  const [connectError, setConnectError] = useState("");
 
   const navigate = useNavigate();
 
+  //Lưu lại trạng thái tìm kiếm hiện tại của trang Expert Search trước khi chuyển sang trang khác.
+  // NOTE: sessionStorage chỉ lưu được dạng string. không lưu trực tiếp được. Nên dùng JSON.stringify()
   const saveSearchState = () => {
   try {
     sessionStorage.setItem(
@@ -132,6 +224,7 @@ export default function ExpertSearchPage() {
       JSON.stringify({
         query,
         seniority,
+        ratingFilter,
         experts,
         hasSearched,
       })
@@ -143,27 +236,41 @@ export default function ExpertSearchPage() {
 
   const handleConnect = async (expert) => {
     saveSearchState();
-
+    setConnectError("");
     try {
+      // Client hiện tại đã từng chat với Expert này chưa?
       const existing = await findExistingConversationWithExpert(axiosInstance, {
         expertUserId: expert.userId,
       });
 
+      // Nếu đã có conversation
+      // ?. optional chaining. Kiểm tra an toàn.
       if (existing?.conversationId) {
-        navigate(`/client/messages/${existing.conversationId}`);
+        navigate(`/client/messages/${existing.conversationId}`); // mở chat cũ nếu tr đó đa có nhắn tin
         return;
       }
 
+      // Nếu ch có conversation
+      //Chuyển sang trang Messages nhưng truyền thông tin Expert cần tạo chat.
       navigate(
         `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
       );
     } catch (err) {
-      console.error("Find conversation failed:", err);
-      alert("Unable to open conversation with the expert.");
+      setConnectError(
+        err?.response?.data?.message ||
+          "Unable to open conversation with the expert."
+      );
     }
   };
 
-  const toggleSeniority = (key) => { setSeniority((prev) => (prev === key ? "" : key)); };
+  //Xử lý chọn/bỏ chọn filter level.
+  const toggleSeniority = (key) => {
+    setSeniority((prev) => (prev === key ? "" : key));
+  };
+
+  const toggleRating = (value) => {
+    setRatingFilter((prev) => (prev === value ? "" : value));
+  };
 
   // Chỉ lưu lại state NGAY LÚC bấm "View Profile" — đây là điểm duy nhất đặt cờ
   // cho phép phục hồi data khi quay lại. Mọi cách khác để vào lại trang này
@@ -174,6 +281,7 @@ export default function ExpertSearchPage() {
       sessionStorage.setItem(SESSION_KEY, JSON.stringify({
         query,
         seniority,
+        ratingFilter,
         experts,
         hasSearched,
       }));
@@ -191,36 +299,60 @@ export default function ExpertSearchPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSearch = async () => {
+  //Đây là hàm xử lý hành động Search Expert.
+  const handleSearch = async (override = {}) => {
+    const nextQuery = override.query ?? query; //Lấy query để tìm. ??: Nếu bên trái có giá trị thì dùng, nếu không thì lấy bên phải.
+    const nextSeniority = override.seniority ?? seniority;
+    const nextRatingFilter = override.ratingFilter ?? ratingFilter;
+
     setSearching(true);
+
     try {
-      const selectedOption = SENIORITY_OPTIONS.find((s) => s.key === seniority);
-      // Chỉ gửi `level` lên BE khi option đó ứng với đúng 1 giá trị enum thật
-      // (Fresher/Junior/Senior). Option "Mid" gộp 2 giá trị nên không gửi lên
-      // BE, để tránh đoán sai việc API có hỗ trợ multi-value hay không.
+      //Tìm cấu hình level tương ứng.
+      const selectedOption = SENIORITY_OPTIONS.find(
+        (s) => s.key === nextSeniority
+      );
+
+      // Chỉ gửi `level` lên BE khi option đó ứng với đúng 1 giá trị enum thật.
+      // Option "Mid" gộp MID + MID_LEVEL nên lọc phía FE.
       const levelParam =
         selectedOption && selectedOption.values.length === 1
           ? selectedOption.values[0]
           : undefined;
 
-      const res = await axiosInstance.get("/experts", {
-        params: {
-          keyword: query.trim() || undefined,
-          level: levelParam,
-          availableOnly: true,
-          page: 1,
-          pageSize: 100,
-        },
+       //Gọi Backend lấy danh sách Expert.
+       //Gọi API
+      let items = await fetchAllExperts({
+        keyword: nextQuery.trim() || undefined,
+        level: levelParam,
+        availableOnly: true,
       });
 
-      const data = res.data;
-      let items = Array.isArray(data) ? data : (data?.items || data?.data || []);
-
-      // Lọc phía FE riêng cho "Mid" (gộp MID + MID_LEVEL).
+      // Lọc phía FE riêng cho "Mid" vì BE chỉ nhận 1 level.
       if (selectedOption && selectedOption.values.length > 1) {
-        items = items.filter((e) => selectedOption.values.includes((e.level || "").toUpperCase()));
+        items = items.filter((e) =>
+          selectedOption.values.includes((e.level || "").toUpperCase())
+        );
       }
 
+      // API /experts hiện chưa có query param lọc rating,
+      // nên lọc sao ở FE sau khi lấy danh sách.
+      if (nextRatingFilter) {
+        const selectedRating = Number(nextRatingFilter);
+
+        items = items.filter((e) => {
+          const avg = Number(e.averageRating ?? 0);
+          const reviews = Number(e.totalReviews ?? 0);
+
+          if (reviews <= 0) return false;
+
+          if (selectedRating === 5) {
+            return avg === 5;
+          }
+
+          return avg >= selectedRating && avg < selectedRating + 1;
+        });
+      }
       setExperts(items);
       setHasSearched(true);
     } catch (err) {
@@ -234,19 +366,26 @@ export default function ExpertSearchPage() {
   const handleReset = () => {
     setQuery("");
     setSeniority("");
+    setRatingFilter("");
     setExperts([]);
     setHasSearched(false);
+
     try {
       sessionStorage.removeItem(SESSION_KEY);
     } catch {
       // ignore
     }
-    setTimeout(() => handleSearch(), 0);
+
+    handleSearch({
+      query: "",
+      seniority: "",
+      ratingFilter: "",
+    });
   };
 
   return (
     <ClientLayout>
-      <div className="min-h-screen px-6 pb-12 pt-12">
+      <div className="px-6 pb-12 pt-12">
 
         {/* Header */}
         <div className="mx-auto mb-8 max-w-[900px] text-center">
@@ -267,7 +406,7 @@ export default function ExpertSearchPage() {
                   placeholder="Search experts by name, skill, or keyword..."
                   className="w-full rounded-xl border border-white/10 bg-[#0b0e14] py-4 pl-[52px] pr-4 text-[15px] text-gray-100 outline-none transition-colors focus:border-cyan-400" />
               </div>
-              <button onClick={handleSearch} disabled={searching}
+              <button onClick={() => handleSearch()} disabled={searching}
                 className={`flex items-center gap-2 whitespace-nowrap rounded-xl px-8 py-4 font-display text-[15px] font-bold shadow-[0_0_15px_rgba(0,240,255,0.3)] ${
                   searching ? "cursor-not-allowed bg-cyan-400/80 text-[#101319]" : "bg-cyan-400 text-[#101319]"
                 }`}>
@@ -294,29 +433,59 @@ export default function ExpertSearchPage() {
                 </button>
               </div>
               <div className="mb-6">
-                <label className="mb-3 block font-mono text-[10px] uppercase tracking-wider text-gray-400">Seniority</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {SENIORITY_OPTIONS.map((s) => {
-                    const isSelected = seniority === s.key;
-                    return (
-                      <button
-                        key={s.key}
-                        type="button"
-                        onClick={() => toggleSeniority(s.key)}
-                        className={`rounded-md px-2 py-2 text-xs transition-all ${
-                          isSelected
-                            ? "border border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.35)]"
-                            : "border border-white/10 bg-[#272a30] text-gray-300 hover:border-cyan-400/50 hover:text-cyan-400"
-                        }`}
-                      >
-                        {s.label}
-                      </button>
-                    );
-                  })}
-                </div>
+              <label className="mb-3 block font-mono text-[10px] uppercase tracking-wider text-gray-400">Seniority</label>
+              <div className="grid grid-cols-2 gap-2">
+                {SENIORITY_OPTIONS.map((s) => {
+                  const isSelected = seniority === s.key;
+                  return (
+                    <button
+                      key={s.key}
+                      type="button"
+                      onClick={() => toggleSeniority(s.key)}
+                      className={`rounded-md px-2 py-2 text-xs transition-all ${
+                        isSelected
+                          ? "border border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.35)]"
+                          : "border border-white/10 bg-[#272a30] text-gray-300 hover:border-cyan-400/50 hover:text-cyan-400"
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  );
+                })}
               </div>
+            </div>
 
-              <button type="button" onClick={handleSearch} disabled={searching}
+            <div className="mb-6">
+              <label className="mb-3 block font-mono text-[10px] uppercase tracking-wider text-gray-400">Rating</label>
+
+              <div className="space-y-2">
+                {RATING_OPTIONS.map((option) => {
+                  const isSelected = ratingFilter === option.value;
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => toggleRating(option.value)}
+                      className={`flex w-full items-center justify-between rounded-md border px-3 py-2 text-xs transition-all ${
+                        isSelected
+                          ? "border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.35)]"
+                          : "border-white/10 bg-[#272a30] text-gray-300 hover:border-cyan-400/50 hover:text-cyan-400"
+                      }`}
+                    >
+                      <span>{option.label}</span>
+                      <StarRating
+                        rating={Number(option.value)}
+                        className=""
+                        sizeClass="text-[13px]"
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <button type="button" onClick={() => handleSearch()} disabled={searching}
                 className="mt-4 w-full rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-bold text-[#101319] shadow-[0_0_15px_rgba(0,240,255,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70">
                 {searching ? "Applying..." : "Apply"}
               </button>
@@ -325,6 +494,15 @@ export default function ExpertSearchPage() {
 
           {/* Results */}
           <div className="flex-1">
+            {connectError && (
+              <div className="mb-5 flex items-center gap-2 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+                <span className="material-symbols-outlined text-[18px]">
+                  error
+                </span>
+
+                {connectError}
+              </div>
+            )}
             {searching && (
               <div className="py-20 text-center">
                 <span className="material-symbols-outlined mb-4 block animate-spin text-cyan-400" style={{ fontSize: 64 }}>autorenew</span>

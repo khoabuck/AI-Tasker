@@ -57,6 +57,7 @@ export default function ClientReviewPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
   
 
   const [rating, setRating] = useState(0);
@@ -78,7 +79,17 @@ export default function ClientReviewPage() {
       })
       .catch((err) => {
         if (err?.code === "ERR_CANCELED") return;
-        // 404 = chưa review → bình thường
+
+        if (err?.response?.status === 404) {
+          setExistingReview(null);
+          return;
+        }
+
+        setLoadError(
+          err?.response?.data?.message ||
+          err?.response?.data?.title ||
+          "Unable to load review."
+        );
       })
       .finally(() => setLoading(false));
     return () => controller.abort();
@@ -86,31 +97,47 @@ export default function ClientReviewPage() {
 
   // ── Submit review ─────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (rating === 0) { setError("Please select a star rating."); return; }
-    if (!comment.trim()) { setError("Please enter your review."); return; }
-    if (comment.trim().length < 10) { setError("Review is too short (minimum 10 characters)."); return; }
+    if (submitting) return;
 
-    navigate(`/client/projects/${projectId}`, {
-      replace: true,
-      state: {
-        successMsg: "Review submitted successfully.",
-      },
-    });
+    if (rating === 0) {
+      setError("Please select a star rating.");
+      return;
+    }
+
+    if (!comment.trim()) {
+      setError("Please enter your review.");
+      return;
+    }
+
+    if (comment.trim().length < 10) {
+      setError("Review is too short (minimum 10 characters).");
+      return;
+    }
+
+    setSubmitting(true);
     setError("");
-    try {
-      await axiosInstance.post(`/projects/${projectId}/reviews`, {
-      rating,
-      comment: comment.trim(),
-    });
 
-    navigate(`/client/projects/${projectId}`, {
-      replace: true,
-      state: {
-        successMsg: "Review submitted successfully.",
-      },
-    });
+    try {
+      await axiosInstance.post(
+        `/projects/${projectId}/reviews`,
+        {
+          rating,
+          comment: comment.trim(),
+        }
+      );
+
+      navigate(`/client/projects/${projectId}`, {
+        replace: true,
+        state: {
+          successMsg: "Review submitted successfully.",
+        },
+      });
     } catch (err) {
-      setError(err?.response?.data?.message || "Submit review failed. Please try again.");
+      setError(
+        err?.response?.data?.message ||
+        err?.response?.data?.title ||
+        "Submit review failed. Please try again."
+      );
     } finally {
       setSubmitting(false);
     }
@@ -126,7 +153,52 @@ export default function ClientReviewPage() {
     </ClientLayout>
   );
 
-  
+  if (loadError) {
+    return (
+      <ClientLayout>
+        <div
+          style={{
+            textAlign: "center",
+            padding: "120px 24px",
+          }}
+        >
+          <span
+            className="material-symbols-outlined"
+            style={{
+              fontSize: 48,
+              color: "#f87171",
+              display: "block",
+              marginBottom: 12,
+            }}
+          >
+            error_outline
+          </span>
+
+          <p style={{ color: "#f87171", marginBottom: 20 }}>
+            {loadError}
+          </p>
+
+          <button
+            type="button"
+            onClick={() =>
+              navigate("/client/projects?status=COMPLETED")
+            }
+            style={{
+              padding: "10px 20px",
+              borderRadius: 8,
+              border: "none",
+              background: "#00F0FF",
+              color: "#002022",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            Back to Projects
+          </button>
+        </div>
+      </ClientLayout>
+    );
+  }
   
 
   const isReadonly = !!existingReview;
@@ -189,11 +261,7 @@ export default function ClientReviewPage() {
               onFocus={(e) => { if (!isReadonly) e.target.style.borderColor = "#00F0FF"; }}
               onBlur={(e) => { if (!isReadonly) e.target.style.borderColor = error && !comment.trim() ? "#ef4444" : "rgba(255,255,255,0.12)"; }}
             />
-            {!isReadonly && (
-              <p style={{ fontSize: 12, color: comment.length > 450 ? "#f97316" : "#8c90a0", marginTop: 6, textAlign: "right" }}>
-                {comment.length}/500
-              </p>
-            )}
+            
           </div>
 
           {/* Quick tags — chỉ hiện khi chưa review */}

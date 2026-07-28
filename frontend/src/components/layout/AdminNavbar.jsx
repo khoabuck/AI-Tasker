@@ -11,7 +11,7 @@ export default function AdminNavbar() {
   };
 
   const navLinkClass = ({ isActive }) =>
-    `group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
+    `group flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
       isActive
         ? "border-cyan-400/25 bg-cyan-400/10 text-cyan-300"
         : "border-transparent text-gray-400 hover:border-white/10 hover:bg-white/[0.04] hover:text-white"
@@ -20,7 +20,7 @@ export default function AdminNavbar() {
   const adminInitials = getInitials(user?.fullName || user?.name || "Admin");
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-[280px] shrink-0 border-r border-white/10 bg-[#0b0f15] md:flex md:flex-col">
+    <aside className="fixed inset-y-0 left-0 z-40 hidden h-screen h-dvh w-[280px] shrink-0 overflow-hidden border-r border-white/10 bg-[#0b0f15] md:flex md:flex-col">
       <div className="border-b border-white/10 px-5 py-5">
         <Link
           to="/admin/dashboard"
@@ -96,8 +96,8 @@ export default function AdminNavbar() {
 function NavItem({ to, icon, label, className }) {
   return (
     <NavLink to={to} className={className}>
-      <span className="material-symbols-outlined text-[20px]">{icon}</span>
-      <span>{label}</span>
+      <span className="material-symbols-outlined shrink-0 text-[20px]">{icon}</span>
+      <span className="min-w-0 truncate">{label}</span>
     </NavLink>
   );
 }

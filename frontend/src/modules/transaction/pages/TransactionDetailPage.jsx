@@ -12,6 +12,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import { transactionService } from "../../../services/transaction.service";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const cardStyle = {
   background: "rgba(16,19,25,0.85)",
   backdropFilter: "blur(20px)",
@@ -101,20 +109,25 @@ export default function TransactionDetailPage() {
     );
   }
 
-  if (error || !transaction) {
-    return (
-      <ClientLayout>
-        <div style={{ textAlign: "center", padding: "120px 24px" }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Transaction not found."}</p>
-          <button onClick={() => navigate("/client/transactions")}
-            style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-            Quay lại danh sách
-          </button>
-        </div>
-      </ClientLayout>
-    );
-  }
+  if (error) {
+  return (
+    <ClientLayout>
+      <div style={{ textAlign: "center", padding: "120px 24px", color: "#8c90a0" }}>
+        Unable to load transaction.
+      </div>
+    </ClientLayout>
+  );
+}
+
+if (!transaction) {
+  return (
+    <ClientLayout>
+      <div style={{ textAlign: "center", padding: "120px 24px", color: "#8c90a0" }}>
+        Loading transaction...
+      </div>
+    </ClientLayout>
+  );
+}
 
   const type = (transaction.type ?? "").toUpperCase();
   const typeCfg = TYPE_CONFIG[type] || { label: type || "—", icon: "receipt_long", color: "#8c90a0", isExpense: transaction.amount < 0 };
@@ -148,7 +161,7 @@ export default function TransactionDetailPage() {
 
           <p style={{ fontSize: 13, color: "#8c90a0", margin: "0 0 6px" }}>{typeCfg.label}</p>
           <p style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 34, fontWeight: 700, color: isExpense ? "#ffb4ab" : "#34d399", margin: "0 0 16px" }}>
-            {isExpense ? "-" : "+"}{Math.abs(amount).toLocaleString()}₫
+            {isExpense ? "-" : "+"}{formatCurrency(Math.abs(amount))}
           </p>
 
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 14px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.05em", background: statusCfg.bg, color: statusCfg.color, border: `1px solid ${statusCfg.border}` }}>

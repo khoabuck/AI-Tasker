@@ -4,9 +4,12 @@
 // GET  /api/conversations/{conversationId}/messages → lấy lịch sử chat
 // POST /api/conversations/{conversationId}/messages { content, messageType, attachmentUrl }
 //
-// LƯU Ý: BE chưa có response mẫu thật (test trả "data": []). Dùng optional chaining +
-// nhiều tên field dự phòng. Khi có response thật, kiểm tra lại field tên/avatar đối phương
-// và field phân biệt "tin nhắn của tôi" trong messages[].
+// BE trả message đầy đủ:
+// GET messages trả danh sách lịch sử.
+// POST messages trả message vừa tạo.
+// FE không tạo pending message.
+// Conversation và message được hiển thị từ dữ liệu BE trả về.
+// senderUserId được dùng để xác định tin nhắn của user hiện tại.
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -42,300 +45,6 @@ function formatMessageTime(value) {
   });
 }
 
-function getMessageTimestamp(message) {
-  const value =
-    message?.createdAt ??
-    message?.sentAt ??
-    message?.updatedAt ??
-    null;
-
-  const timestamp = value ? new Date(value).getTime() : 0;
-
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
-function compareMessagesByTime(a, b) {
-  return getMessageTimestamp(a) - getMessageTimestamp(b);
-}
-
-function isSameSentMessage(serverMessage, pendingMessage) {
-  if (!serverMessage?.isMe || !pendingMessage?.isMe) {
-    return false;
-  }
-
-  if (
-    String(serverMessage.text || "").trim() !==
-    String(pendingMessage.text || "").trim()
-  ) {
-    return false;
-  }
-
-  const serverTime = getMessageTimestamp(serverMessage);
-  const pendingTime = getMessageTimestamp(pendingMessage);
-
-  /*
-   * Cùng nội dung và được tạo gần nhau thì coi là cùng một tin nhắn.
-   * Khoảng 2 phút đủ rộng để chịu độ trễ API nhưng vẫn tránh match nhầm
-   * các tin nhắn trùng nội dung ở thời điểm khác xa nhau.
-   */
-  return (
-    serverTime > 0 &&
-    pendingTime > 0 &&
-    Math.abs(serverTime - pendingTime) <= 2 * 60 * 1000
-  );
-}
-
-function getBackendBaseUrl() {
-  const configuredBackendUrl = String(
-    import.meta.env.VITE_BACKEND_BASE_URL || ""
-  ).trim();
-
-  if (configuredBackendUrl) {
-    return configuredBackendUrl.replace(/\/+$/, "");
-  }
-
-  const configuredApiUrl = String(
-    import.meta.env.VITE_API_BASE_URL ||
-      axiosInstance.defaults.baseURL ||
-      ""
-  ).trim();
-
-  if (configuredApiUrl) {
-    return configuredApiUrl
-      .replace(/\/api\/?$/i, "")
-      .replace(/\/+$/, "");
-  }
-
-  return import.meta.env.DEV
-    ? "http://localhost:5070"
-    : "";
-}
-
-function getExpertFallbackAvatar(identifier) {
-  const key = String(identifier || "expert").trim() || "expert";
-
-  return `https://i.pravatar.cc/120?u=${encodeURIComponent(key)}`;
-}
-
-function normalizeAvatarUrl(value) {
-  let avatar = String(value || "").trim();
-
-  if (!avatar) {
-    return "/default-avatar.png";
-  }
-
-  try {
-    avatar = decodeURIComponent(avatar);
-  } catch {
-    // Keep the original value.
-  }
-
-  if (
-    avatar.startsWith("http://") ||
-    avatar.startsWith("https://") ||
-    avatar.startsWith("blob:") ||
-    avatar.startsWith("data:")
-  ) {
-    return avatar;
-  }
-
-  if (avatar.startsWith("//")) {
-    return `${window.location.protocol}${avatar}`;
-  }
-
-  const backendBaseUrl = getBackendBaseUrl();
-
-  if (!backendBaseUrl) {
-    return avatar.startsWith("/")
-      ? avatar
-      : `/${avatar}`;
-  }
-
-  const normalizedPath = avatar.startsWith("/")
-    ? avatar
-    : `/${avatar}`;
-
-  return `${backendBaseUrl}${normalizedPath}`;
-}
-
-function unwrapExpertProfileResponse(response) {
-  const body = response?.data;
-
-  return (
-    body?.data?.expert ||
-    body?.data?.item ||
-    body?.data ||
-    body?.expert ||
-    body?.item ||
-    body ||
-    null
-  );
-}
-
-function AvatarImage({
-  src,
-  alt,
-  size = 36,
-  style = {},
-  fallbackKey = "",
-}) {
-  const [failed, setFailed] = useState(false);
-
-  const primarySrc = normalizeAvatarUrl(src);
-  const fallbackSrc = getExpertFallbackAvatar(
-    fallbackKey || alt || "expert"
-  );
-
-  return (
-    <img
-      src={failed ? fallbackSrc : primarySrc}
-      alt={alt || "Avatar"}
-      onError={() => {
-        if (!failed) {
-          setFailed(true);
-        }
-      }}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: "50%",
-        objectFit: "cover",
-        flexShrink: 0,
-        ...style,
-      }}
-    />
-  );
-}
-
-// ── Proposal Review Modal — Client xem proposal, Accept hoặc Yêu cầu sửa ──
-function ProposalReviewModal({ state, onClose, onRequestRevision }) {
-  const [revisionNote, setRevisionNote] = useState("");
-  const [showRevisionForm, setShowRevisionForm] = useState(false);
-
-  const p = state.data;
-
-  return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 560, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
-
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 19, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>
-            {showRevisionForm ? "Request Revision" : "Review Proposal"}
-          </h3>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "#8c90a0", cursor: "pointer" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
-          </button>
-        </div>
-
-        {state.loading ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: "#8c90a0" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 36, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
-          </div>
-        ) : state.error && !p ? (
-          <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "12px 16px", color: "#f87171", fontSize: 13 }}>
-            {state.error}
-          </div>
-        ) : p ? (
-          showRevisionForm ? (
-            // ── Revision request form: keep existing proposal data and add notes only ──
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <p style={{ fontSize: 13, color: "#8c90a0", margin: 0, lineHeight: 1.6 }}>
-                The current proposal details will be sent with the message for the expert to compare.
-                You only need to note what changes you want.
-              </p>
-
-              <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 14, fontSize: 12, color: "#8c90a0", display: "flex", flexDirection: "column", gap: 4 }}>
-                <span>Proposed Price: <span style={{ color: "#00F0FF" }}>${p.proposedPrice?.toLocaleString() ?? "—"}</span></span>
-                <span>Timeline: <span style={{ color: "#e1e2eb" }}>{p.proposedTimelineDays ?? "—"} days</span></span>
-              </div>
-
-              <div>
-                <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
-                  Revision notes (e.g. lower price, shorten timeline, add outputs...)
-                </label>
-                <textarea value={revisionNote} onChange={(e) => setRevisionNote(e.target.value)}
-                  placeholder="Example: The price is a bit high, please lower it to $450 and shorten the timeline to 45 days..."
-                  rows={4}
-                  style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
-              </div>
-
-              {state.error && (
-                <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13 }}>{state.error}</div>
-              )}
-
-              <div style={{ display: "flex", gap: 10 }}>
-                <button onClick={() => setShowRevisionForm(false)}
-                  style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
-                  Back
-                </button>
-                <button onClick={() => onRequestRevision(revisionNote)} disabled={state.requestingRevision}
-                  style={{ flex: 2, padding: "12px", background: state.requestingRevision ? "#1d2026" : "#facc15", color: "#1d1500", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: state.requestingRevision ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                  {state.requestingRevision
-                    ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Sending...</>
-                    : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>send</span>Send revision request</>}
-                </button>
-              </div>
-            </div>
-          ) : (
-            // ── Hiện proposal đầy đủ để review ──
-            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-                <div>
-                  <span style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Proposed Price</span>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 22, fontWeight: 700, color: "#00F0FF" }}>${p.proposedPrice?.toLocaleString() ?? "—"}</div>
-                </div>
-                <div>
-                  <span style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Timeline</span>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 22, fontWeight: 700, color: "#e1e2eb" }}>{p.proposedTimelineDays ?? "—"} <span style={{ fontSize: 13, fontWeight: 400, color: "#8c90a0" }}>days</span></div>
-                </div>
-              </div>
-
-              {p.coverLetter && (
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>Cover Letter</p>
-                  <p style={{ fontSize: 13, color: "#c2c6d6", lineHeight: 1.7, margin: 0, whiteSpace: "pre-line" }}>{p.coverLetter}</p>
-                </div>
-              )}
-              {p.expectedOutputs && (
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>Expected Outputs</p>
-                  <p style={{ fontSize: 13, color: "#c2c6d6", lineHeight: 1.7, margin: 0, whiteSpace: "pre-line" }}>{p.expectedOutputs}</p>
-                </div>
-              )}
-              {p.workingApproach && (
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>Working Approach</p>
-                  <p style={{ fontSize: 13, color: "#c2c6d6", lineHeight: 1.7, margin: 0, whiteSpace: "pre-line" }}>{p.workingApproach}</p>
-                </div>
-              )}
-              {p.preliminaryMilestonePlan && (
-                <div>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: "#c0c1ff", marginBottom: 6 }}>Preliminary Milestone Plan</p>
-                  <p style={{ fontSize: 13, color: "#c2c6d6", lineHeight: 1.7, margin: 0, whiteSpace: "pre-line" }}>{p.preliminaryMilestonePlan}</p>
-                </div>
-              )}
-
-              {state.error && (
-                <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13 }}>{state.error}</div>
-              )}
-
-              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                <button onClick={() => setShowRevisionForm(true)}
-                  style={{ flex: 1, padding: "12px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit_note</span>
-                  Request Revision
-                </button>
-                
-              </div>
-            </div>
-          )
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 export default function MessagesPage() {
   const navigate = useNavigate();
   const { conversationId } = useParams();
@@ -344,11 +53,10 @@ export default function MessagesPage() {
   const newExpertUserId = searchParams.get("newExpertUserId");
   const newExpertProfileId = searchParams.get("newExpertProfileId");
   const newExpertName = searchParams.get("newExpertName");
-  const newExpertAvatar = searchParams.get("newExpertAvatar");
   const overrideJobTitle = searchParams.get("jobTitle");
   const isNewChatDraft = !conversationId && !!newExpertUserId;
   const currentUser = authService.getCurrentUser();
-  const currentUserId = currentUser?.userId ?? currentUser?.id;
+  const currentUserId = currentUser?.userId;
 
   const [conversations, setConversations] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
@@ -356,263 +64,101 @@ export default function MessagesPage() {
   const [input, setInput] = useState("");
   const [loadingList, setLoadingList] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [listError, setListError] = useState("");
   const [error, setError] = useState("");
   const [showAttachMenu, setShowAttachMenu] = useState(false);
-  const [proposalModal, setProposalModal] = useState(null); // { loading, error, data, accepting, requestingRevision }
-  const [openConversationMenu, setOpenConversationMenu] = useState(null);
-  const [draftExpertLoaded, setDraftExpertLoaded] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState(null);
 
-  // Pin/Delete chưa có API thật từ BE (không có trong danh sách endpoint) — lưu tạm
-  // vào localStorage để giữ trạng thái qua reload. Khi BE bổ sung API, thay 2 phần này
-  // bằng gọi API thật (PATCH /conversations/{id}/pin, DELETE /conversations/{id}).
-  const [pinnedIds, setPinnedIds] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("pinnedConversationIds") || "[]");
-    } catch { return []; }
-  });
-  const [deletedIds, setDeletedIds] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("deletedConversationIds") || "[]");
-    } catch { return []; }
-  });
+  
 
   const scrollRef = useRef(null);
   const pollRef = useRef(null);
-  const pendingMessagesRef = useRef([]);
 
   // ── Load conversations ───────────────────────────────────────────
   const fetchConversations = useCallback(async () => {
+    setListError("");
+
     try {
       const res = await axiosInstance.get("/conversations/me");
-      
-      const raw = res.data?.data ?? res.data;
-      const list = Array.isArray(raw) ? raw : raw?.items ?? [];
 
-      // Chuẩn hoá field về shape UI đang dùng (id, name, avatar, online, lastMessage, time, unread)
+      const list = Array.isArray(res.data?.data)
+        ? res.data.data
+        : [];
+
       const normalized = list
-        .map((c) => {
-          const convId = c.conversationId ?? c.id ?? c.conversationID;
-
-          return {
-            id: convId,
-            name: c.expertName || c.otherPartyName || c.clientName || "Expert",
-            avatar: normalizeAvatarUrl(
-              c.expertAvatarUrl ||
-                c.ExpertAvatarUrl ||
-                c.expertAvatar ||
-                c.ExpertAvatar ||
-                c.otherPartyAvatarUrl ||
-                c.OtherPartyAvatarUrl ||
-                c.otherPartyAvatar ||
-                c.OtherPartyAvatar ||
-                c.avatarUrl ||
-                c.AvatarUrl ||
-                getExpertFallbackAvatar(
-                  c.expertProfileId ||
-                    c.ExpertProfileId ||
-                    c.expertUserId ||
-                    c.ExpertUserId ||
-                    convId
-                )
-            ),
-            online: c.isOtherPartyOnline ?? false,
-            lastMessage: c.lastMessage?.content || c.lastMessageContent || "Start conversation",
-            time: timeAgo(c.lastMessage?.createdAt || c.lastMessageAt || c.updatedAt || c.createdAt),
-            unread: c.unreadCount || 0,
-            relatedProposalId: c.relatedProposalId,
-            relatedJobId: c.relatedJobId,
-            relatedJobTitle: c.relatedJobTitle,
-            pinned: pinnedIds.includes(convId),
-            raw: c,
-          };
-        })
-        .filter((c) => c.id != null)
-        //.filter((c) => !deletedIds.includes(c.id))
-        // Pin gần nhất lên đầu tiên (pinnedIds[0] mới nhất → vị trí 1, pinnedIds[1] → vị trí 2...),
-        // các conversation chưa pin giữ nguyên thứ tự BE trả về.
-        .sort((a, b) => {
-          if (a.pinned && b.pinned) return pinnedIds.indexOf(a.id) - pinnedIds.indexOf(b.id);
-          if (a.pinned) return -1;
-          if (b.pinned) return 1;
-          return 0;
-        });
+        .map((c) => ({
+          id: c.conversationId,
+          name: c.expertName || "Expert",
+          avatar: c.expertAvatarUrl || null,
+          lastMessage: c.lastMessageContent || "Start conversation",
+          time: timeAgo(c.lastMessageAt || c.createdAt),
+          relatedProposalId: c.relatedProposalId,
+          relatedJobId: c.relatedJobId,
+          relatedJobTitle: c.relatedJobTitle,
+          raw: c,
+        }))
+        .filter((c) => c.id != null);
 
       setConversations(normalized);
 
       if (normalized.length > 0) {
-      const target = initialConvId
-        ? normalized.find((c) => String(c.id) === String(initialConvId))
-        : isNewChatDraft
-        ? null // đang tạo draft chat mới — không tự chọn conversation nào khác
-        : normalized[0];
+        const target = initialConvId
+          ? normalized.find(
+              (c) => String(c.id) === String(initialConvId)
+            )
+          : isNewChatDraft
+          ? null
+          : normalized[0];
 
-      if (!isNewChatDraft) {
-        const resolved = target ?? normalized[0];
-        setActiveChat(
-          resolved && overrideJobTitle
-            ? { ...resolved, relatedJobTitle: overrideJobTitle }
-            : resolved
-        );
+        if (!isNewChatDraft) {
+          const resolved = target ?? normalized[0];
+
+          setActiveChat(
+            resolved && overrideJobTitle
+              ? {
+                  ...resolved,
+                  relatedJobTitle: overrideJobTitle,
+                }
+              : resolved
+          );
+        }
+      } else if (!isNewChatDraft) {
+        setActiveChat(null);
       }
-    } else if (!isNewChatDraft) {
-      setActiveChat(null);
-    }
     } catch (err) {
-      setError(err?.response?.data?.message || "Unable to load conversations.");
+      setListError(
+        err?.response?.data?.message ||
+          "Unable to load conversations."
+      );
     } finally {
       setLoadingList(false);
     }
-  }, [initialConvId, pinnedIds, deletedIds]);
+  }, [initialConvId, isNewChatDraft, overrideJobTitle]);
 
   useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
   useEffect(() => {
-    if (!isNewChatDraft) return;
+  if (!isNewChatDraft) return;
 
-    const resolvedName = newExpertName
-      ? decodeURIComponent(newExpertName)
-      : "Expert";
-
-    const resolvedAvatar = normalizeAvatarUrl(
-      newExpertAvatar ||
-        getExpertFallbackAvatar(
-          newExpertProfileId || newExpertUserId
-        )
-    );
-
-    setActiveChat({
-      id: null,
-      name: resolvedName,
-      avatar: resolvedAvatar,
-      online: false,
-      lastMessage: "",
-      time: "",
-      unread: 0,
-      relatedProposalId: null,
-      relatedJobId: null,
-      relatedJobTitle: overrideJobTitle || null,
-      pinned: false,
-      raw: {
-        expertUserId: Number(newExpertUserId),
-        expertProfileId: newExpertProfileId
-          ? Number(newExpertProfileId)
-          : null,
-        expertAvatarUrl: resolvedAvatar,
-      },
-    });
-
-    setMessages([]);
-    pendingMessagesRef.current = [];
-  }, [
-    isNewChatDraft,
-    newExpertUserId,
-    newExpertProfileId,
-    newExpertName,
-    newExpertAvatar,
-    overrideJobTitle,
-  ]);
-
-  useEffect(() => {
-    if (!isNewChatDraft || !newExpertProfileId) {
-      setDraftExpertLoaded(true);
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadDraftExpert = async () => {
-      try {
-        const response = await axiosInstance.get(
-          `/experts/${newExpertProfileId}`
-        );
-
-        if (cancelled) return;
-
-        const profile = unwrapExpertProfileResponse(response);
-
-        if (!profile) {
-          setDraftExpertLoaded(true);
-          return;
-        }
-
-        const profileAvatar =
-          profile.avatarUrl ||
-          profile.AvatarUrl ||
-          profile.userAvatarUrl ||
-          profile.UserAvatarUrl ||
-          profile.user?.avatarUrl ||
-          profile.user?.AvatarUrl ||
-          "";
-
-        const profileName =
-          profile.fullName ||
-          profile.FullName ||
-          profile.expertName ||
-          profile.ExpertName ||
-          "";
-
-        setActiveChat((previous) => {
-          if (!previous || previous.id) return previous;
-
-          return {
-            ...previous,
-            name: profileName || previous.name || "Expert",
-            avatar: normalizeAvatarUrl(
-              profileAvatar ||
-                previous.avatar ||
-                getExpertFallbackAvatar(
-                  profile.expertProfileId ||
-                    profile.ExpertProfileId ||
-                    newExpertProfileId ||
-                    profile.userId ||
-                    profile.UserId ||
-                    newExpertUserId
-                )
-            ),
-            raw: {
-              ...(previous.raw || {}),
-              expertUserId:
-                profile.userId ||
-                profile.UserId ||
-                previous.raw?.expertUserId,
-              expertProfileId:
-                profile.expertProfileId ||
-                profile.ExpertProfileId ||
-                previous.raw?.expertProfileId,
-              expertAvatarUrl: normalizeAvatarUrl(
-                profileAvatar ||
-                  previous.raw?.expertAvatarUrl ||
-                  previous.avatar ||
-                  getExpertFallbackAvatar(
-                    profile.expertProfileId ||
-                      profile.ExpertProfileId ||
-                      newExpertProfileId ||
-                      profile.userId ||
-                      profile.UserId ||
-                      newExpertUserId
-                  )
-              ),
-            },
-          };
-        });
-      } catch {
-        // Keep the query-string data and fallback avatar.
-      } finally {
-        if (!cancelled) {
-          setDraftExpertLoaded(true);
-        }
-      }
-    };
-
-    loadDraftExpert();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    isNewChatDraft,
-    newExpertProfileId,
-  ]);
+  setActiveChat({
+    id: null,
+    name: newExpertName || "Expert",
+    avatar: null,
+    lastMessage: "",
+    time: "",
+    relatedProposalId: null,
+    relatedJobId: null,
+    relatedJobTitle: null,
+    raw: {
+      expertUserId: Number(newExpertUserId),
+      expertProfileId: newExpertProfileId
+        ? Number(newExpertProfileId)
+        : null,
+    },
+  });
+  setMessages([]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [isNewChatDraft, newExpertUserId, newExpertProfileId, newExpertName]);
 
   // ── Load messages khi chọn conversation ──────────────────────────
   const fetchMessages = useCallback(async (convId, silent = false) => {
@@ -624,56 +170,33 @@ export default function MessagesPage() {
       const list = Array.isArray(raw) ? raw : raw?.items ?? [];
 
       const normalized = list.map((m) => {
-        const senderId = m.senderUserId ?? m.senderId ?? m.userId;
-
         const isMe =
-          currentUserId != null && senderId != null
-            ? String(senderId) === String(currentUserId)
-            : Boolean(m.isMine ?? (m.senderType === "CLIENT"));
-
-        const createdAt =
-          m.createdAt ??
-          m.sentAt ??
-          m.updatedAt ??
-          null;
+          currentUserId != null &&
+          m.senderUserId != null &&
+          String(m.senderUserId) === String(currentUserId);
 
         return {
-          id: m.conversationMessageId ?? m.messageId ?? m.id,
+          id: m.conversationMessageId,
           text: m.content,
           isMe,
-          time: formatMessageTime(createdAt),
+          time: formatMessageTime(m.createdAt),
           avatar: m.senderAvatarUrl,
-          createdAt,
-          pending: false,
+          messageType: m.messageType,
+          attachmentUrl: m.attachmentUrl,
         };
       });
 
-      /*
-       * Polling có thể chạy trước khi Backend trả lại tin nhắn vừa gửi.
-       * Nếu chỉ setMessages(normalized), optimistic message sẽ biến mất tạm thời.
-       * Giữ pending messages cho đến khi tìm thấy bản tương ứng từ Backend.
-       */
-      const remainingPending = pendingMessagesRef.current.filter(
-        (pendingMessage) => {
-          const matched = normalized.some((serverMessage) =>
-            isSameSentMessage(serverMessage, pendingMessage)
-          );
+      setMessages(normalized);
 
-          return !matched;
-        }
-      );
-
-      pendingMessagesRef.current = remainingPending;
-
-      setMessages(
-        [...normalized, ...remainingPending].sort(compareMessagesByTime)
-      );
+      if (!silent) {
+        setError("");
+      }
     } catch (err) {
       if (!silent) setError(err?.response?.data?.message || "Unable to load messages.");
     } finally {
       if (!silent) setLoadingMessages(false);
     }
-  }, []);
+  }, [currentUserId]);
 
   const MESSAGE_POLL_INTERVAL = 5000;
 
@@ -700,30 +223,7 @@ useEffect(() => {
   if (!content || !activeChat) return;
 
   setInput("");
-
-  const clientCreatedAt = new Date().toISOString();
-  const tempId = `temp-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2, 8)}`;
-
-  const optimisticMessage = {
-    id: tempId,
-    text: content,
-    isMe: true,
-    time: formatMessageTime(clientCreatedAt),
-    createdAt: clientCreatedAt,
-    avatar: null,
-    pending: true,
-  };
-
-  pendingMessagesRef.current = [
-    ...pendingMessagesRef.current,
-    optimisticMessage,
-  ];
-
-  setMessages((prev) =>
-    [...prev, optimisticMessage].sort(compareMessagesByTime)
-  );
+  
 
   try {
     let convId = activeChat.id;
@@ -731,7 +231,7 @@ useEffect(() => {
     if (!convId) {
       // Draft chưa có conversation thật — tạo mới ngay lúc gửi tin đầu tiên.
       const res = await axiosInstance.post("/conversations", {
-        type: "DIRECT",
+        conversationType: "JOB_INQUIRY",
         expertUserId: activeChat.raw.expertUserId,
         expertProfileId: activeChat.raw.expertProfileId,
         initialMessage: content,
@@ -752,174 +252,47 @@ useEffect(() => {
       });
     }
 
+    setError("");
     await fetchMessages(convId, true);
   } catch (err) {
     setError(err?.response?.data?.message || "Send message failed.");
-
-    pendingMessagesRef.current =
-      pendingMessagesRef.current.filter(
-        (message) => message.id !== tempId
-      );
-
-    setMessages((prev) =>
-      prev.filter((message) => message.id !== tempId)
-    );
-
     setInput(content);
   }
 };
 
-  const handleUploadFile = async (file, type) => {
+  const handleUploadFile = async (file) => {
     if (!file || !activeChat?.id) return;
 
-    if (type === "FILE") {
-      // There is no regular file upload endpoint in the API list — only /api/uploads/images for images.
-      setError("Uploading attachments (non-image) is not supported. Please ask backend to add a file upload endpoint.");
-      return;
-    }
 
     const formData = new FormData();
     formData.append("file", file);
 
     try {
       const res = await axiosInstance.post("/uploads/images", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const url = res.data?.url ?? res.data?.data?.url ?? res.data;
+      headers: { "Content-Type": "multipart/form-data" },
+    });
 
-      await axiosInstance.post(`/conversations/${activeChat.id}/messages`, {
-        content: "[Image]",
-        messageType: "IMAGE",
-        attachmentUrl: url,
-      });
-      await fetchMessages(activeChat.id, true);
+    const url =
+      res.data?.image?.url ??
+      res.data?.data?.image?.url ??
+      res.data?.data?.url ??
+      res.data?.url;
+
+    if (!url) {
+      throw new Error("Upload succeeded but image URL was not returned.");
+    }
+
+    await axiosInstance.post(`/conversations/${activeChat.id}/messages`, {
+      content: "[Image]",
+      messageType: "TEXT",
+      attachmentUrl: url,
+    });
+
+    setError("");
+    await fetchMessages(activeChat.id, true);
     } catch (err) {
       setError(err?.response?.data?.message || "Image upload failed.");
     }
-  };
-
-  // MOCK/TẠM: cho hiện nút "Review Proposal" khi có relatedJobId (chưa cần relatedProposalId có sẵn).
-  // Khi bấm, sẽ tự tìm proposalId đã ACCEPT/SUBMITTED của expert này trong job đó, hiện proposal
-  // để client review trước, KHÔNG tạo contract ngay — chỉ tạo contract khi client bấm Accept.
-  const canReviewProposal = activeChat?.relatedProposalId || activeChat?.relatedJobId;
-
-  const handleReviewProposal = async () => {
-    setShowAttachMenu(false);
-    if (!activeChat) return;
-
-    setProposalModal({ loading: true, error: "", data: null });
-
-    try {
-      let proposalId = activeChat.relatedProposalId;
-
-      // MOCK: chưa có proposalId sẵn → tự tìm qua job proposals
-      if (!proposalId && activeChat.relatedJobId) {
-        const propRes = await axiosInstance.get(`/jobs/${activeChat.relatedJobId}/proposals`);
-        const propRaw = propRes.data?.data ?? propRes.data;
-        const proposals = Array.isArray(propRaw) ? propRaw : propRaw?.items ?? [];
-
-        // QUAN TRỌNG: 1 job có thể nhận proposal từ nhiều expert khác nhau, nhưng chỉ
-        // được accept đúng 1. Phải lọc đúng proposal của expert trong conversation này
-        // (so theo expertUserId), KHÔNG fallback lấy proposals[0] — tránh lấy nhầm
-        // proposal của 1 expert khác đã gửi cho cùng job.
-        const expertUserId = activeChat.raw?.expertUserId;
-        const target = expertUserId != null
-          ? proposals.find((p) => p.expertUserId === expertUserId)
-          : null;
-
-        if (!target) {
-          setProposalModal({ loading: false, error: "No proposal found for this expert on the related job.", data: null });
-          return;
-        }
-        proposalId = target.proposalId;
-      }
-
-      if (!proposalId) {
-        setProposalModal({ loading: false, error: "Linked proposal not found.", data: null });
-        return;
-      }
-
-      const res = await axiosInstance.get(`/proposals/${proposalId}`);
-      let proposalData = res.data?.data ?? res.data;
-      if (Array.isArray(proposalData)) proposalData = proposalData[0] ?? null;
-
-      if (!proposalData) {
-        setProposalModal({ loading: false, error: "Proposal not found.", data: null });
-        return;
-      }
-
-      setProposalModal({ loading: false, error: "", data: proposalData });
-    } catch (err) {
-      setProposalModal({ loading: false, error: err?.response?.data?.message || "Unable to load proposal. Please try again.", data: null });
-    }
-  };
-
-
-  // Client gửi yêu cầu sửa — gửi message kèm toàn bộ nội dung proposal hiện tại làm tham chiếu,
-  // KHÔNG gọi resubmit (resubmit là việc của expert tự làm sau khi đọc feedback này).
-  const handleRequestRevision = async (feedbackText) => {
-    if (!proposalModal?.data || !activeChat?.id) return;
-    setProposalModal((prev) => ({ ...prev, requestingRevision: true, error: "" }));
-
-    const p = proposalModal.data;
-    const summary =
-`Revision request for proposal (keeping existing details for reference):
-
-— Proposed Price: $${p.proposedPrice?.toLocaleString() ?? "—"}
-— Timeline: ${p.proposedTimelineDays ?? "—"} days
-— Cover Letter: ${p.coverLetter ?? "—"}
-— Expected Outputs: ${p.expectedOutputs ?? "—"}
-— Working Approach: ${p.workingApproach ?? "—"}
-— Milestone Plan: ${p.preliminaryMilestonePlan ?? "—"}
-
-Client notes: ${feedbackText || "(no additional notes)"}`;
-
-    try {
-      await axiosInstance.post(`/conversations/${activeChat.id}/messages`, {
-        content: summary,
-        messageType: "TEXT",
-        attachmentUrl: null,
-      });
-      await fetchMessages(activeChat.id, true);
-      setProposalModal(null);
-    } catch (err) {
-      setProposalModal((prev) => ({ ...prev, requestingRevision: false, error: err?.response?.data?.message || "Revision request failed." }));
-    }
-  };
-
-
-  // ── Pin / Unpin conversation ──────────────────────────────────────
-  // Chưa có API pin thật từ BE — lưu vào localStorage để giữ qua reload.
-  // Conversation pin gần nhất → vị trí 1 (đầu danh sách), pin cũ hơn lùi xuống vị trí 2, 3...
-  const handlePinConversation = (conversationId) => {
-    setPinnedIds((prev) => {
-      const next = prev.includes(conversationId)
-        ? prev.filter((id) => id !== conversationId) // đã pin → bấm lại để unpin
-        : [conversationId, ...prev]; // pin mới → lên đầu danh sách pin
-      localStorage.setItem("pinnedConversationIds", JSON.stringify(next));
-      return next;
-    });
-    setOpenConversationMenu(null);
-  };
-
-  // ── Delete conversation (chỉ ẩn cục bộ — chưa có API DELETE thật từ BE) ──
-  const handleDeleteConversation = (conversationId) => {
-    if (!window.confirm("Delete this conversation? (Note: this only hides it on this device; backend does not support permanent delete yet)")) return;
-
-    setDeletedIds((prev) => {
-      const next = [...prev, conversationId];
-      localStorage.setItem("deletedConversationIds", JSON.stringify(next));
-      return next;
-    });
-
-    setConversations((prev) => prev.filter((c) => c.id !== conversationId));
-
-    if (activeChat?.id === conversationId) {
-      setActiveChat(null);
-      setMessages([]);
-    }
-
-    setOpenConversationMenu(null);
   };
 
   if (loadingList) {
@@ -930,6 +303,44 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
           <span className="material-symbols-outlined" style={{ fontSize: 40, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
         </div>
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
+
+  if (listError) {
+    return (
+      <div
+        style={{
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          background: "#101319",
+        }}
+      >
+        <ClientNavbar />
+
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "column",
+            gap: 12,
+            color: "#f87171",
+          }}
+        >
+          <span
+            className="material-symbols-outlined"
+            style={{ fontSize: 48 }}
+          >
+            error_outline
+          </span>
+
+          <p style={{ fontSize: 14 }}>
+            {listError}
+          </p>
+        </div>
       </div>
     );
   }
@@ -974,77 +385,71 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                 </div>
               ) : (
                 conversations.map((conv) => (
-                  <div key={conv.id} onClick={() => setActiveChat(conv)}
+                  <div key={conv.id} onClick={() => {
+                        setActiveChat(conv);
+                        navigate(`/client/messages/${conv.id}`, {
+                          replace: true,
+                        });
+                      }}
                     style={{ padding: 12, borderRadius: 12, marginBottom: 4, cursor: "pointer", background: activeChat?.id === conv.id ? "rgba(173,198,255,0.08)" : "transparent", border: `1px solid ${activeChat?.id === conv.id ? "rgba(173,198,255,0.2)" : "transparent"}`, transition: "all 0.2s", position: "relative" }}>
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      <div style={{ position: "relative", flexShrink: 0 }}>
-                        <AvatarImage
+                      <div style={{ flexShrink: 0 }}>
+                      {conv.avatar ? (
+                        <img
                           src={conv.avatar}
                           alt={conv.name}
-                          size={44}
-                          fallbackKey={
-                            conv.raw?.expertProfileId ||
-                            conv.raw?.ExpertProfileId ||
-                            conv.raw?.expertUserId ||
-                            conv.raw?.ExpertUserId ||
-                            conv.id
-                          }
                           style={{
-                            filter: conv.online
-                              ? "none"
-                              : "grayscale(0.5) opacity(0.8)",
+                            width: 44,
+                            height: 44,
+                            borderRadius: "50%",
+                            objectFit: "cover",
                           }}
                         />
-                        <span style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, background: conv.online ? "#00F0FF" : "#8c90a0", borderRadius: "50%", border: "2px solid #1d2026" }} />
-                      </div>
+                      ) : (
+                        <div
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: "50%",
+                            background: "#272a30",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#8c90a0",
+                          }}
+                        >
+                          <span
+                            className="material-symbols-outlined"
+                            style={{ fontSize: 24 }}
+                          >
+                            person
+                          </span>
+                        </div>
+                      )}
+                    </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3, gap: 6 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, flex: 1 }}>
-                            {conv.pinned && (
-                              <span className="material-symbols-outlined" style={{ fontSize: 13, color: "#00F0FF", flexShrink: 0 }}>keep</span>
-                            )}
-                            <span style={{ fontWeight: conv.unread > 0 ? 700 : 500, fontSize: 14, color: "#e1e2eb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conv.name}</span>
+                            <span
+                              style={{
+                                fontWeight: 500,
+                                fontSize: 14,
+                                color: "#e1e2eb",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {conv.name}
+                            </span>
                           </div>
 
-                          <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0, position: "relative" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
                             <span style={{ fontSize: 10, color: "#8c90a0" }}>{conv.time}</span>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setOpenConversationMenu(openConversationMenu === conv.id ? null : conv.id); }}
-                              style={{ width: 22, height: 22, display: "flex", alignItems: "center", justifyContent: "center", background: "none", border: "none", color: "#8c90a0", cursor: "pointer", borderRadius: 6 }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; e.currentTarget.style.color = "#fff"; }}
-                              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; e.currentTarget.style.color = "#8c90a0"; }}>
-                              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>more_vert</span>
-                            </button>
-
-                            {openConversationMenu === conv.id && (
-                              <>
-                                <div onClick={(e) => { e.stopPropagation(); setOpenConversationMenu(null); }} style={{ position: "fixed", inset: 0, zIndex: 60 }} />
-                                <div onClick={(e) => e.stopPropagation()}
-                                  style={{ position: "absolute", right: 0, top: 26, zIndex: 70, width: 176, background: "#171b23", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, boxShadow: "0 12px 30px rgba(0,0,0,0.6)", overflow: "hidden" }}>
-                                  <button onClick={() => handlePinConversation(conv.id)}
-                                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: "none", border: "none", color: "#e1e2eb", fontSize: 13, cursor: "pointer", textAlign: "left" }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-                                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{conv.pinned ? "keep_off" : "keep"}</span>
-                                    {conv.pinned ? "Unpin chat" : "Pin chat"}
-                                  </button>
-                                  <button onClick={() => handleDeleteConversation(conv.id)}
-                                    style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "10px 12px", background: "none", border: "none", color: "#f87171", fontSize: 13, cursor: "pointer", textAlign: "left" }}
-                                    onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(248,113,113,0.1)")}
-                                    onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete</span>
-                                    Delete chat
-                                  </button>
-                                </div>
-                              </>
-                            )}
                           </div>
                         </div>
-                        <p style={{ fontSize: 12, color: conv.unread > 0 ? "#c2c6d6" : "#8c90a0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conv.lastMessage}</p>
+                        <p style={{ fontSize: 12, color: "#8c90a0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conv.lastMessage}</p>
                       </div>
-                      {conv.unread > 0 && (
-                        <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#00F0FF", color: "#002022", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{conv.unread}</div>
-                      )}
                     </div>
                   </div>
                 ))
@@ -1089,25 +494,41 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                     arrow_back
                   </span>
                 </button>
-                <div style={{ position: "relative" }}>
-                  <AvatarImage
+                <div>
+                {activeChat.avatar ? (
+                  <img
                     src={activeChat.avatar}
                     alt={activeChat.name}
-                    size={36}
-                    fallbackKey={
-                      activeChat.raw?.expertProfileId ||
-                      activeChat.raw?.ExpertProfileId ||
-                      activeChat.raw?.expertUserId ||
-                      activeChat.raw?.ExpertUserId ||
-                      activeChat.id
-                    }
                     style={{
-                      border:
-                        "2px solid rgba(173,198,255,0.3)",
+                      width: 36,
+                      height: 36,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      border: "2px solid rgba(173,198,255,0.3)",
                     }}
                   />
-                  {activeChat.online && <div style={{ position: "absolute", bottom: -1, right: -1, width: 10, height: 10, background: "#00F0FF", borderRadius: "50%", border: "2px solid #101319" }} />}
-                </div>
+                ) : (
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: "50%",
+                      background: "#272a30",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#8c90a0",
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: 21 }}
+                    >
+                      person
+                    </span>
+                  </div>
+                )}
+              </div>
                 <div>
                   <h3 style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{activeChat.name}</h3>
                 </div>
@@ -1130,35 +551,44 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                   <div key={msg.id} style={{ display: "flex", gap: 10, flexDirection: msg.isMe ? "row-reverse" : "row", alignSelf: msg.isMe ? "flex-end" : "flex-start", maxWidth: "95%" }}>
                     {!msg.isMe && (
                       msg.avatar
-                        ? <AvatarImage
-                            src={msg.avatar}
-                            alt={activeChat.name}
-                            size={30}
-                            fallbackKey={
-                              activeChat.raw?.expertProfileId ||
-                              activeChat.raw?.ExpertProfileId ||
-                              activeChat.raw?.expertUserId ||
-                              activeChat.raw?.ExpertUserId ||
-                              activeChat.id
-                            }
-                            style={{
-                              alignSelf: "flex-end",
-                            }}
-                          />
+                        ? <img src={msg.avatar} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", alignSelf: "flex-end", flexShrink: 0 }} />
                         : <div style={{ width: 30, flexShrink: 0 }} />
                     )}
                     <div style={{ display: "flex", flexDirection: "column", alignItems: msg.isMe ? "flex-end" : "flex-start", gap: 3 }}>
-                      <div style={{ padding: "10px 14px", borderRadius: msg.isMe ? "16px 16px 0 16px" : "16px 16px 16px 0", background: msg.isMe ? "linear-gradient(135deg, #1772eb, #00F0FF)" : "rgba(50,53,59,0.9)", border: msg.isMe ? "none" : "1px solid rgba(255,255,255,0.05)", boxShadow: msg.isMe ? "0 4px 15px rgba(0,240,255,0.2)" : "none", color: msg.isMe ? "#fff" : "#c2c6d6", fontSize: 14, lineHeight: 1.6, wordBreak: "break-word" }}>
-                        {msg.text}
-                      </div>
-                      <span
+                      <div
                         style={{
-                          fontSize: 10,
-                          color: msg.pending ? "#facc15" : "#8c90a0",
+                          padding: msg.attachmentUrl ? 4 : "10px 14px",
+                          borderRadius: msg.isMe ? "16px 16px 0 16px" : "16px 16px 16px 0",
+                          background: msg.isMe
+                            ? "linear-gradient(135deg, #1772eb, #00F0FF)"
+                            : "rgba(50,53,59,0.9)",
+                          border: msg.isMe ? "none" : "1px solid rgba(255,255,255,0.05)",
+                          boxShadow: msg.isMe ? "0 4px 15px rgba(0,240,255,0.2)" : "none",
+                          color: msg.isMe ? "#fff" : "#c2c6d6",
+                          fontSize: 14,
+                          lineHeight: 1.6,
+                          wordBreak: "break-word",
                         }}
                       >
-                        {msg.pending ? "Sending..." : msg.time}
-                      </span>
+                        {msg.attachmentUrl ? (
+                        <img
+                          src={msg.attachmentUrl}
+                          alt="Attachment"
+                          onClick={() => setPreviewImageUrl(msg.attachmentUrl)}
+                          style={{
+                            display: "block",
+                            maxWidth: 260,
+                            maxHeight: 320,
+                            borderRadius: 12,
+                            objectFit: "cover",
+                            cursor: "zoom-in",
+                          }}
+                        />
+                      ) : (
+                        msg.text
+                      )}
+                      </div>
+                      <span style={{ fontSize: 10, color: "#8c90a0" }}>{msg.time}</span>
                     </div>
                   </div>
                 ))
@@ -1181,9 +611,15 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                 <div className="relative shrink-0">
                   <button
                     type="button"
-                    onClick={() => setShowAttachMenu((v) => !v)}
+                    disabled={!activeChat?.id}
+                    onClick={() => {
+                      if (!activeChat?.id) return;
+                      setShowAttachMenu((v) => !v);
+                    }}
                     className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 ${
-                      showAttachMenu
+                      !activeChat?.id
+                        ? "cursor-not-allowed text-slate-600 opacity-50"
+                        : showAttachMenu
                         ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/30"
                         : "text-slate-400 hover:bg-cyan-500/10 hover:text-cyan-400"
                     }`}
@@ -1221,21 +657,6 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                           </span>
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowAttachMenu(false);
-                            document.getElementById("msg-file-input")?.click();
-                          }}
-                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white/5"
-                        >
-                          <span className="material-symbols-outlined text-[19px] text-slate-400">
-                            attach_file
-                          </span>
-                          <span className="text-sm font-medium text-slate-300">
-                            File
-                          </span>
-                        </button>
                       </div>
                     </>
                   )}
@@ -1245,15 +666,17 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={(e) => handleUploadFile(e.target.files?.[0], "IMAGE")}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+
+                      if (file) {
+                        handleUploadFile(file);
+                      }
+
+                      e.target.value = "";
+                    }}
                   />
 
-                  <input
-                    id="msg-file-input"
-                    type="file"
-                    className="hidden"
-                    onChange={(e) => handleUploadFile(e.target.files?.[0], "FILE")}
-                  />
                 </div>
 
                 <textarea
@@ -1290,16 +713,64 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
         </div>
       </div>
 
-      {/* ── Modal review proposal (Accept hoặc Yêu cầu sửa) ── */}
-      {proposalModal && (
-        <ProposalReviewModal
-          state={proposalModal}
-          onClose={() => setProposalModal(null)}
-          onRequestRevision={handleRequestRevision}
-        />
-      )}
+      {/* ── Image preview modal ── */}
+      {previewImageUrl && (
+        <div
+          onClick={() => setPreviewImageUrl(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 1200,
+            background: "rgba(0,0,0,0.88)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            cursor: "zoom-out",
+          }}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPreviewImageUrl(null);
+            }}
+            style={{
+              position: "fixed",
+              top: 20,
+              right: 20,
+              width: 40,
+              height: 40,
+              borderRadius: "50%",
+              border: "1px solid rgba(255,255,255,0.2)",
+              background: "rgba(16,19,25,0.85)",
+              color: "#fff",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span className="material-symbols-outlined">
+              close
+            </span>
+          </button>
 
-      
+          <img
+            src={previewImageUrl}
+            alt="Preview"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              maxWidth: "92vw",
+              maxHeight: "88vh",
+              borderRadius: 14,
+              objectFit: "contain",
+              boxShadow: "0 20px 80px rgba(0,0,0,0.65)",
+              cursor: "default",
+            }}
+          />
+        </div>
+      )}
     </>
   );
 }

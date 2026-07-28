@@ -353,10 +353,25 @@ const normalizeDecision = (value) => {
   return "";
 };
 
-const buildResolvePayload = (formData) => ({
-  decision: normalizeDecision(formData.decision),
-  adminDecision: String(formData.adminDecision || "").trim(),
-});
+const buildResolvePayload = (formData = {}) => {
+  const decision = normalizeDecision(formData.decision);
+  const adminDecision = String(
+    getValue(formData.adminDecision, formData.reason, formData.note, "")
+  ).trim();
+
+  if (!decision) {
+    throw new Error("Decision must be ACCEPT or REJECT.");
+  }
+
+  if (!adminDecision) {
+    throw new Error("Admin decision note is required.");
+  }
+
+  return {
+    decision,
+    adminDecision,
+  };
+};
 
 const adminReviewReportService = {
   async getReports(params = {}) {

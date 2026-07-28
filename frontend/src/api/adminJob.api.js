@@ -1,8 +1,8 @@
 import axiosInstance from "./axiosInstance";
 
 const adminJobApi = {
-  getAllJobs() {
-    return axiosInstance.get("/admin/jobs");
+  getAllJobs(params = {}) {
+    return axiosInstance.get("/admin/jobs", { params });
   },
 
   getJobById(jobId) {

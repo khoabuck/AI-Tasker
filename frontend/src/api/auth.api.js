@@ -1,18 +1,22 @@
 import axiosInstance from "./axiosInstance";
 
+//Tạo URL hoàn chỉnh để redirect sang Google OAuth.
 const getAuthRedirectUrl = (path) => {
-  const configuredApiBaseUrl = String(
+  const configuredApiBaseUrl = String( // Lấy API base URL
     axiosInstance.defaults.baseURL || ""
   ).trim();
 
+  //Kiểm tra có baseURL không
   if (!configuredApiBaseUrl) {
     throw new Error("Missing API base URL configuration.");
   }
 
+  //Chuẩn hóa dấu /
   const apiBaseUrl = configuredApiBaseUrl.endsWith("/")
     ? configuredApiBaseUrl
     : `${configuredApiBaseUrl}/`;
 
+    //Đây là JavaScript Web API. Dùng tạo URL chuẩn.
   const absoluteApiBaseUrl = new URL(
     apiBaseUrl,
     window.location.origin
@@ -35,6 +39,7 @@ export const registerApi = async ({ fullName, email, password }) => {
   return res.data;
 };
 
+//GET /api/auth/verify-email
 export const verifyEmailApi = async (token) => {
   const res = await axiosInstance.get("/auth/verify-email", {
     params: { token },
@@ -43,6 +48,7 @@ export const verifyEmailApi = async (token) => {
   return res.data;
 };
 
+//POST /auth/resend-verification-email
 export const resendVerificationEmailApi = async ({ email }) => {
   const res = await axiosInstance.post("/auth/resend-verification-email", {
     email,
@@ -76,12 +82,14 @@ export const loginWithGoogleApi = () => {
   window.location.assign(redirectUrl);
 };
 
+//GET /auth/me
 export const getMeApi = async () => {
   const res = await axiosInstance.get("/auth/me");
 
   return res.data;
 };
 
+//POST /auth/forgot-password
 export const forgotPasswordApi = async ({ email }) => {
   const res = await axiosInstance.post("/auth/forgot-password", {
     email,
@@ -90,6 +98,7 @@ export const forgotPasswordApi = async ({ email }) => {
   return res.data;
 };
 
+//POST /auth/reset-password
 export const resetPasswordApi = async ({
   token,
   newPassword,
@@ -122,6 +131,7 @@ export const changePasswordApi = async ({
   return res.data;
 };
 
+//POST /auth/select-role
 export const selectRoleApi = async ({ role }) => {
   const res = await axiosInstance.post("/auth/select-role", {
     role,

@@ -102,8 +102,7 @@ import AdminAiManagementPage from "../../modules/admin/pages/AdminAiManagementPa
 import AdminWorkflowPolicyPage from "../../modules/admin/pages/AdminWorkflowPolicyPage";
 import AdminReviewReportsPage from "../../modules/admin/pages/AdminReviewReportsPage";
 import AdminLoginSecurityPolicyPage from "../../modules/admin/pages/AdminLoginSecurityPolicyPage";
-
-
+import AdminRecentActivityPage from "../../modules/admin/pages/AdminRecentActivityPage";
 
 // Error pages
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
@@ -172,7 +171,6 @@ export default function AppRouter() {
 
       {/* Client projects */}
       <Route path="/client/projects" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ProjectsListPage /></ProtectedRoute>} />
-      <Route path="/client/projects-old" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ProjectsPage /></ProtectedRoute>} />
       <Route path="/client/projects/:id" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientProjectDetailPage /></ProtectedRoute>} />
       <Route path="/client/projects/:id/review" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientReviewPage /></ProtectedRoute>} />
       <Route path="/client/milestones/:milestoneId/deliverables" element={<ProtectedRoute allowedRoles={["CLIENT"]}><MilestoneDeliverablesPage /></ProtectedRoute>} />
@@ -256,6 +254,8 @@ export default function AppRouter() {
       <Route path="/admin/workflow-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminWorkflowPolicyPage /></ProtectedRoute>}/>
       <Route path="/admin/review-reports" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminReviewReportsPage /></ProtectedRoute>}/>
       <Route path="/admin/login-security-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminLoginSecurityPolicyPage /></ProtectedRoute>}/>  
+      <Route path="/admin/dashboard/recent-activity" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminRecentActivityPage /></ProtectedRoute>} />
+
 
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />

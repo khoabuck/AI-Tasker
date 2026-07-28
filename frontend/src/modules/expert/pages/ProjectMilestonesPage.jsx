@@ -300,9 +300,11 @@ function MilestoneCard({
             {milestone.title || "Untitled Milestone"}
           </h2>
 
-          <p className="mt-4 line-clamp-3 text-sm leading-6 text-gray-400">
-            {milestone.description || "No description."}
-          </p>
+          {milestone.description && (
+            <p className="mt-4 line-clamp-3 text-sm leading-6 text-gray-400">
+              {milestone.description}
+            </p>
+          )}
         </div>
 
         <div className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 lg:w-80">
