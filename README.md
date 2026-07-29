@@ -20,7 +20,7 @@ A specialized freelance marketplace that connects Clients with AI Experts throug
 | **University** | FPT University |
 | **Project** | AITasker — AI Marketplace Platform for AI Automation Services |
 | **Team** | Team 5 |
-| **Lecturer / Supervisor** | *[Update lecturer name]* |
+| **Lecturer / Supervisor** | Tran Ngoc Nhu Quynh |
 | **Repository** | [github.com/khoabuck/AI-Tasker](https://github.com/khoabuck/AI-Tasker) |
 
 ---
