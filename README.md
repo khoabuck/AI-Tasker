@@ -6,7 +6,7 @@
 
 A specialized freelance marketplace that connects Clients with AI Experts through AI-assisted job creation, intelligent matching, realtime collaboration, contracts, escrow payments, project delivery, and dispute resolution.
 
-[Overview](#overview) · [Team](#project-team) · [Features](#core-features) · [Workflow](#business-workflow) · [Local Setup](#local-development) · [Deployment](#deployed-environment)
+[Overview](#overview) · [Team](#project-team) · [Features](#core-features) · [Workflow](#business-workflow) · [Local Setup](#local-development) · [Deployment](https://aitasker.dpdns.org)
 
 </div>
 
@@ -135,6 +135,7 @@ flowchart TB
     EXT --- CLOUD[Cloudinary]
     EXT --- PAY[PayOS]
     EXT --- GOOGLE[Google OAuth]
+    EXT --- VietQr
 ```
 
 ### Backend Responsibilities
